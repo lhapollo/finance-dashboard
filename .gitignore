@@ -1,0 +1,25 @@
+# Secrets — never commit
+.env
+.env.local
+
+# Real financial data lives here — never commit
+data/*
+!data/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# OS / editors
+.DS_Store
+.vscode/
