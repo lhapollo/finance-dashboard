@@ -33,6 +33,8 @@ class Transaction(Base):
     transfer_pair_id: Mapped[int | None] = mapped_column(ForeignKey("transactions.id"))
     fingerprint: Mapped[str] = mapped_column(String(64), unique=True)
     source: Mapped[str] = mapped_column(String(10))  # csv / plaid
-    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    imported_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     account: Mapped[Account] = relationship(back_populates="transactions")
