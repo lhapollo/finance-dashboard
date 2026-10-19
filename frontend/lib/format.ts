@@ -1,10 +1,9 @@
 const cad = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
 
 /**
- * Formats an amount as Canadian dollars, e.g. -4.5 -> "-$4.50".
- * Accepts strings because the API sends money as strings like "-4.50"
- * (the backend keeps it as Decimal, and JSON numbers would lose precision).
+ * Formats whole cents as Canadian dollars, e.g. -450 -> "-$4.50".
+ * The API sends money as integer cents; this is the only place they become dollars.
  */
-export function formatCurrency(amount: number | string): string {
-  return cad.format(Number(amount));
+export function formatCurrency(cents: number): string {
+  return cad.format(cents / 100);
 }

@@ -1,5 +1,4 @@
 from datetime import date
-from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -12,7 +11,8 @@ class StandardTransaction(BaseModel):
 
     date: date
     description: str = Field(min_length=1, max_length=500)
-    amount: Decimal = Field(max_digits=12, decimal_places=2)
+    # Whole cents; negative = money out. strict: a float like 46.18 is rejected, not coerced.
+    amount_cents: int = Field(strict=True)
     source: Literal["csv", "plaid"] = "csv"
 
     @field_validator("description")
@@ -23,9 +23,9 @@ class StandardTransaction(BaseModel):
             raise ValueError("description is blank")
         return v
 
-    @field_validator("amount")
+    @field_validator("amount_cents")
     @classmethod
-    def nonzero(cls, v: Decimal) -> Decimal:
+    def nonzero(cls, v: int) -> int:
         if v == 0:
             raise ValueError("amount is zero")
         return v
@@ -47,7 +47,7 @@ class TransactionOut(BaseModel):
     account_id: int
     date: date
     description: str
-    amount: Decimal
+    amount_cents: int
     category: str
     category_source: str
     is_transfer: bool
@@ -65,12 +65,12 @@ class TransactionUpdate(BaseModel):
 
 class CategoryTotal(BaseModel):
     category: str
-    total: Decimal  # positive number = amount spent
+    total_cents: int  # positive number = amount spent
 
 
 class PeriodTotal(BaseModel):
     period: date  # first day of the month
-    total: Decimal
+    total_cents: int
 
 
 class ImportResult(BaseModel):
