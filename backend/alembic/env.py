@@ -15,8 +15,8 @@ config = context.config
 config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
 
 # Interpret the config file for Python logging.
-# This line sets up loggers basically.
-if config.config_file_name is not None:
+# This line sets up loggers basically. Skipped when tests run migrations, so pytest keeps its own.
+if config.config_file_name is not None and "connection" not in config.attributes:
     fileConfig(config.config_file_name)
 
 # Lets `alembic revision --autogenerate` compare models.py against the database.
@@ -59,6 +59,14 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    # Tests hand over a connection to their own test database (see tests/conftest.py).
+    connection = config.attributes.get("connection")
+    if connection is not None:
+        context.configure(connection=connection, target_metadata=target_metadata)
+        with context.begin_transaction():
+            context.run_migrations()
+        return
+
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
@@ -66,9 +74,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()
