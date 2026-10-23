@@ -23,7 +23,8 @@ class Transaction(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
     date: Mapped[date] = mapped_column(Date, index=True)
-    description: Mapped[str] = mapped_column(String(500))
+    description: Mapped[str] = mapped_column(String(500))  # cleaned-up merchant name
+    raw_description: Mapped[str] = mapped_column(String(500))  # exactly what the bank wrote
     # Whole cents: $46.18 is 4618. Negative = money out, positive = money in. Never use float.
     amount_cents: Mapped[int] = mapped_column(Integer)
     category: Mapped[str] = mapped_column(String(50), default="uncategorized", index=True)

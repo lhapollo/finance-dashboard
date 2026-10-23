@@ -10,7 +10,9 @@ class StandardTransaction(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     date: date
-    description: str = Field(min_length=1, max_length=500)
+    description: str = Field(min_length=1, max_length=500)  # cleaned-up merchant name
+    # Exactly what the bank wrote, kept so a bad cleanup never loses information.
+    raw_description: str = Field(min_length=1, max_length=500)
     # Whole cents; negative = money out. strict: a float like 46.18 is rejected, not coerced.
     amount_cents: int = Field(strict=True)
     source: Literal["csv", "plaid"] = "csv"
