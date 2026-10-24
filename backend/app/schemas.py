@@ -89,9 +89,19 @@ class CategoryTotal(BaseModel):
     total_cents: int  # positive number = amount spent
 
 
-class PeriodTotal(BaseModel):
-    period: date  # first day of the month
-    total_cents: int
+class PeriodCategoryTotal(BaseModel):
+    period: date  # first day of the month (or year)
+    category: str
+    total_cents: int  # positive number = amount spent
+
+
+class MonthSummary(BaseModel):
+    month: date  # first day of the month
+    spent_cents: int  # positive number
+    income_cents: int
+    net_cents: int  # income - spent
+    previous_spent_cents: int
+    change_pct: float | None  # spending vs the month before; None if that month had none
 
 
 class ImportResult(BaseModel):

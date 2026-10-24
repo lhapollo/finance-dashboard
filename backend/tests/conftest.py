@@ -98,12 +98,13 @@ _ids = itertools.count()
 
 @pytest.fixture
 def add(db_session):
-    """add(account, day, cents, raw_description, **other_fields): save one October 2026 row."""
+    """add(account, day, cents, raw_description, **other_fields): save one row.
+    `day` is a day in October 2026, or a full date."""
 
     def add(account, day, cents, raw="SOMETHING", **fields):
         t = Transaction(
             account=account,
-            date=date(2026, 10, day),
+            date=day if isinstance(day, date) else date(2026, 10, day),
             description=raw.title(),
             raw_description=raw,
             amount_cents=cents,
