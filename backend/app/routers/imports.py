@@ -10,6 +10,7 @@ from app.importers import CONVERTERS
 from app.importers.common import ImportFormatError
 from app.models import Account, Transaction
 from app.schemas import ImportResult
+from app.services.categories import apply_rules
 from app.services.fingerprint import fingerprints
 from app.services.transfers import detect_transfers
 
@@ -64,5 +65,9 @@ def import_csv(
     session.add_all(new)
     session.flush()  # gives the new rows their ids, which transfer pairing needs
     detect_transfers(session)  # across all rows, since a new row may pair with an old one
+    try:
+        apply_rules(session)  # also re-applies any rule edits to older rows
+    except ValueError as e:  # a typo in a rules file; nothing is saved
+        raise HTTPException(400, str(e)) from None
     session.commit()
     return ImportResult(inserted=len(new), skipped=len(parsed) - len(new))

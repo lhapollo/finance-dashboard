@@ -4,19 +4,23 @@ Each test runs inside a transaction that's rolled back afterwards, so tests can'
 other's rows and nothing is left behind.
 """
 
+import itertools
 import os
+from datetime import date
 from pathlib import Path
 
 import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.main import app
+from app.models import Account, Transaction
+from app.services import categories
 
 BACKEND = Path(__file__).parent.parent
 
@@ -31,6 +35,13 @@ def _test_database_url() -> str | None:
             if line.startswith("TEST_DATABASE_URL="):
                 return line.split("=", 1)[1].strip()
     return None
+
+
+@pytest.fixture(autouse=True)
+def no_personal_rules(monkeypatch, tmp_path):
+    """Tests only see the committed category rules, never data/category_rules.yaml, so they
+    behave the same on your Mac as in CI."""
+    monkeypatch.setattr(categories, "PERSONAL_RULES", tmp_path / "no-personal-rules.yaml")
 
 
 @pytest.fixture(scope="session")
@@ -74,3 +85,34 @@ def client(db_session):
     app.dependency_overrides[get_session] = lambda: db_session
     yield TestClient(app)
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def card(db_session):
+    """The CIBC account that migration 1 seeds."""
+    return db_session.scalar(select(Account).where(Account.name == "CIBC Credit Card"))
+
+
+_ids = itertools.count()
+
+
+@pytest.fixture
+def add(db_session):
+    """add(account, day, cents, raw_description, **other_fields): save one October 2026 row."""
+
+    def add(account, day, cents, raw="SOMETHING", **fields):
+        t = Transaction(
+            account=account,
+            date=date(2026, 10, day),
+            description=raw.title(),
+            raw_description=raw,
+            amount_cents=cents,
+            fingerprint=f"test-{next(_ids)}",
+            source="csv",
+            **fields,
+        )
+        db_session.add(t)
+        db_session.flush()
+        return t
+
+    return add

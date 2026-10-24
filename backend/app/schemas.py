@@ -49,10 +49,13 @@ class TransactionOut(BaseModel):
     account_id: int
     date: date
     description: str
+    raw_description: str
     amount_cents: int
     category: str
     category_source: str
     is_transfer: bool
+    transfer_source: str
+    transfer_pair_id: int | None
 
 
 class TransactionPage(BaseModel):
@@ -61,8 +64,24 @@ class TransactionPage(BaseModel):
 
 
 class TransactionUpdate(BaseModel):
+    """Only the fields you send are changed. Either change locks that field against the rules."""
+
     category: str | None = Field(default=None, min_length=1, max_length=50)
     is_transfer: bool | None = None
+
+    @field_validator("category")
+    @classmethod
+    def normalize_category(cls, v: str | None) -> str | None:
+        # "Dining " and "dining" should be one category, not two.
+        if v is not None:
+            v = " ".join(v.split()).lower()
+            if not v:
+                raise ValueError("category is blank")
+        return v
+
+
+class RecategorizeResult(BaseModel):
+    changed: int
 
 
 class CategoryTotal(BaseModel):

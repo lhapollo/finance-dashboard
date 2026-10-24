@@ -33,7 +33,7 @@ def test_import_saves_every_row(client, db_session, cibc):
     assert loblaws.amount_cents == -4618
     assert loblaws.raw_description == "LOBLAWS #1042 TORONTO, ON"
     assert loblaws.account_id == cibc.id
-    assert loblaws.category == "uncategorized"
+    assert loblaws.category == "groceries"
     assert loblaws.source == "csv"
 
 

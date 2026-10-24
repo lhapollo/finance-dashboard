@@ -1,5 +1,3 @@
-import itertools
-from datetime import date
 from pathlib import Path
 
 import pytest
@@ -7,13 +5,6 @@ from sqlalchemy import select
 
 from app.models import Account, Transaction
 from app.services.transfers import detect_transfers
-
-_ids = itertools.count()
-
-
-@pytest.fixture
-def card(db_session):
-    return db_session.scalar(select(Account).where(Account.name == "CIBC Credit Card"))
 
 
 @pytest.fixture
@@ -30,26 +21,6 @@ def investing(db_session):
     db_session.add(account)
     db_session.flush()
     return account
-
-
-@pytest.fixture
-def add(db_session):
-    def add(account, day, cents, raw="SOMETHING", **fields):
-        t = Transaction(
-            account=account,
-            date=date(2026, 10, day),
-            description=raw.title(),
-            raw_description=raw,
-            amount_cents=cents,
-            fingerprint=f"test-{next(_ids)}",
-            source="csv",
-            **fields,
-        )
-        db_session.add(t)
-        db_session.flush()
-        return t
-
-    return add
 
 
 @pytest.mark.parametrize(

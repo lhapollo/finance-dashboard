@@ -1,0 +1,216 @@
+# Category rules: "if the bank's description contains this, use this category".
+#
+# - Matching ignores case and only matches whole words: TEA matches "HERO TEA" but not "STEAM".
+# - End a pattern with * to also match longer words: DOORDASH* matches "DD/DOORDASHYOSUSHI".
+# - If several patterns match, the longest one wins: "ANNUAL FEE REBATE" beats "ANNUAL FEE".
+# - Personal rules (local places) go in data/category_rules.yaml, which is gitignored and
+#   wins ties against this file.
+# - After editing, re-apply with POST /transactions/recategorize (or just import again).
+#   Categories you set by hand are never overwritten.
+
+groceries:
+  - T&T
+  - LOBLAW*
+  - NOFRILLS
+  - NO FRILLS
+  - METRO
+  - LONGO'S
+  - COSTCO
+  - FARM BOY
+  - SOBEYS
+  - FOOD BASICS
+  - FRESHCO
+  - HMART
+  - H MART
+  - INDEPENDENT GROCER
+  - WAL-MART SUPERCENTER
+  - WALMART SUPERCENTER
+
+dining:
+  # Delivery
+  - UBEREATS
+  - DOORDASH*
+  - SKIP THE DISHES
+  # Chains
+  - MCDONALD*  # also catches "MCDONALD?S", where CIBC garbled the apostrophe
+  - TIM HORTONS
+  - STARBUCKS
+  - CHIPOTLE
+  - SHAKE SHACK
+  - POPEYES
+  - WENDYS
+  - WENDY'S
+  - A&W
+  - HARVEY'S
+  - HARVEYS
+  - KFC
+  - DAIRY QUEEN
+  - JOLLIBEE
+  - BURGER KING
+  - SUBWAY
+  - BOOSTER JUICE
+  - GONG CHA
+  - HEYTEA
+  - KINTON
+  - CACTUS CLUB
+  - EARLS
+  - MARUGAME
+  - PARIS BAGUETTE
+  - CHUNGCHUN
+  - DAVES HOT CHICKEN
+  - SANTOUKA
+  - SANSOTEI
+  - AJISEN
+  - LAZEEZ
+  - TSUJIRI
+  - BEAVERTAILS
+  - CINNAHOLIC
+  - CHATIME
+  - TAHINIS
+  - CONCESSIONS
+  - MAD RADISH
+  - NEW YORK FRIES
+  - NYF*
+  # Keywords
+  - RESTAU*  # RESTAURANT(S), and CIBC's cut-off "HONG DAE KOREAN RESTAU"
+  - DINER
+  - KITCHEN
+  - CAFE
+  - COFFEE
+  - DONUT
+  - BAKERY
+  - DESSERT*
+  - MOCHI
+  - CAKE
+  - TEA
+  - JUICE
+  - YOGURT
+  - PIZZA
+  - BURGER*
+  - BURRITO*
+  - SHAWARMA
+  - POUTINE
+  - CHICKEN
+  - BBQ
+  - GRILL
+  - WOK
+  - RAMEN
+  - UDON
+  - SUSHI
+  - IZAKAYA
+  - POKE
+  - PHO
+  - VIETNAMESE
+  - NOODLE
+  - DUMPLING
+  - HOT POT
+  - HOTPOT
+  - MALATANG
+  - GOURMET
+  - VENDING
+
+transport:
+  - UBERTRIP
+  - UBER* TRIP
+  - PRESTO
+  - PAYGO  # NYC / PATH transit taps
+  - GO TRANSIT
+  - TTC
+  - ESSO
+  - PETRO-CANADA
+  - SHELL
+  - NEURON MOBILITY
+  - LIME
+  - INDIGO PARK
+  - GREEN P
+  - IMPARK
+  - DRIVE TEST
+  - MTO
+
+shopping:
+  - AMAZON
+  - AMZN
+  - ALIEXPRESS
+  - UNIQLO
+  - HOLLISTER
+  - OLD NAVY
+  - BLUENOTES
+  - WINNERS
+  - SPORT CHEK
+  - CANADIAN TIRE
+  - HOME DEPOT
+  - DOLLARAMA
+  - WAL-MART
+  - WALMART
+  - HERSCHEL
+  - FOSSIL
+  - FLYING TIGER
+  - INDIGO
+  - IMAGINUS
+  - WORDANS
+  - SHOWCASE  # gift and gadget store chain
+
+games:
+  - STEAM
+  - STEAMGAMES.COM
+  - FANATICAL
+  - GAMEBILLET
+  - GAMERSGATE
+  - INDIEGALA
+  - CHEAPKEYS
+  - NINTENDO
+  - PLAYSTATION
+  - XBOX
+
+entertainment:
+  - CINEPLEX
+  - IMAGINE CI*  # CIBC cuts it to "IMAGINE CI"
+  - FAMOUS PLAYER*
+  - LANDMARK WEB TICKETING  # Landmark Cinemas
+  - TICKETMASTER
+  - TMCANADA
+  - SEATGEEK
+  - EVENTBRITE
+  - ESCAPE ROOM
+  - CA WONDERLAND
+  - KARAOKE
+
+subscriptions:
+  - SPOTIFY
+  - APPLE.COM/BILL
+  - NETFLIX
+  - UBERONE
+  - PRIME MEMBER
+  - VPN
+
+health:
+  - SHOPPERS DRUG MART
+  - PHARMASAVE
+  - REXALL
+  - SEPHORA
+  - BATH & BODY WORKS
+  - BATH AND BODY WORKS
+  - THE BODY SHOP
+  - DENTISTRY
+  - DENTAL
+
+travel:
+  - AIRALO
+  - AIRBNB
+  - EXPEDIA
+  - AIR CANADA
+  - WESTJET
+  - BLUE MOUNTAIN RESORTS
+  - BLUE MOUNTAIN RESERVAT
+  - MOUNT ST LOUIS
+
+home:
+  - COINAMATIC  # laundry machines
+
+fees:
+  - ANNUAL FEE
+  - ANNUAL FEE REBATE  # a refund of the fee, so it cancels out within "fees"
+  - PURCHASE INTEREST
+
+rewards:
+  - CASHBACK
