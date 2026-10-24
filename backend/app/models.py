@@ -31,6 +31,8 @@ class Transaction(Base):
     category_source: Mapped[str] = mapped_column(String(10), default="rule")  # rule / manual
     is_transfer: Mapped[bool] = mapped_column(Boolean, default=False)
     transfer_pair_id: Mapped[int | None] = mapped_column(ForeignKey("transactions.id"))
+    # auto = detection may change is_transfer; manual = I set it by hand, detection leaves it.
+    transfer_source: Mapped[str] = mapped_column(String(10), default="auto", server_default="auto")
     fingerprint: Mapped[str] = mapped_column(String(64), unique=True)
     source: Mapped[str] = mapped_column(String(10))  # csv / plaid
     imported_at: Mapped[datetime] = mapped_column(

@@ -11,6 +11,7 @@ from app.importers.common import ImportFormatError
 from app.models import Account, Transaction
 from app.schemas import ImportResult
 from app.services.fingerprint import fingerprints
+from app.services.transfers import detect_transfers
 
 router = APIRouter(tags=["import"])
 
@@ -61,5 +62,7 @@ def import_csv(
         if fp not in existing
     ]
     session.add_all(new)
+    session.flush()  # gives the new rows their ids, which transfer pairing needs
+    detect_transfers(session)  # across all rows, since a new row may pair with an old one
     session.commit()
     return ImportResult(inserted=len(new), skipped=len(parsed) - len(new))
