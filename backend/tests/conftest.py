@@ -102,10 +102,11 @@ def add(db_session):
     `day` is a day in October 2026, or a full date."""
 
     def add(account, day, cents, raw="SOMETHING", **fields):
+        fields.setdefault("cleaned_description", raw.title())
+        fields.setdefault("description", fields["cleaned_description"])
         t = Transaction(
             account=account,
             date=day if isinstance(day, date) else date(2026, 10, day),
-            description=raw.title(),
             raw_description=raw,
             amount_cents=cents,
             fingerprint=f"test-{next(_ids)}",

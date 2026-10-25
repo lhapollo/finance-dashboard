@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -48,7 +48,9 @@ class TransactionOut(BaseModel):
     id: int
     account_id: int
     date: date
-    description: str
+    description: str  # the name to show
+    cleaned_description: str  # the converter's name, before any rename
+    description_source: str  # auto / rule / manual
     raw_description: str
     amount_cents: int
     category: str
@@ -56,6 +58,7 @@ class TransactionOut(BaseModel):
     is_transfer: bool
     transfer_source: str
     transfer_pair_id: int | None
+    imported_at: datetime
 
 
 class TransactionPage(BaseModel):
@@ -64,10 +67,26 @@ class TransactionPage(BaseModel):
 
 
 class TransactionUpdate(BaseModel):
-    """Only the fields you send are changed. Either change locks that field against the rules."""
+    """Only the fields you send are changed. Each change locks that field against the rules.
+
+    description: a new name for this transaction. Send null to undo a rename. With
+    rename_all, every transaction from the same merchant gets the name, now and in future
+    imports, instead of just this one.
+    """
 
     category: str | None = Field(default=None, min_length=1, max_length=50)
     is_transfer: bool | None = None
+    description: str | None = Field(default=None, max_length=500)
+    rename_all: bool = False
+
+    @field_validator("description")
+    @classmethod
+    def tidy_description(cls, v: str | None) -> str | None:
+        if v is not None:
+            v = " ".join(v.split())
+            if not v:
+                raise ValueError("name is blank")
+        return v
 
     @field_validator("category")
     @classmethod
@@ -82,6 +101,14 @@ class TransactionUpdate(BaseModel):
 
 class RecategorizeResult(BaseModel):
     changed: int
+
+
+class RenameRuleOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    match: str
+    name: str
 
 
 class CategoryTotal(BaseModel):

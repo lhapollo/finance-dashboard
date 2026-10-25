@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import FRONTEND_ORIGINS
-from app.routers import accounts, imports, summary, transactions
+from app.routers import accounts, imports, rename_rules, summary, transactions
 
 app = FastAPI(title="Finance Dashboard API")
 
@@ -18,6 +18,7 @@ app.include_router(accounts.router)
 app.include_router(imports.router)
 app.include_router(transactions.router)
 app.include_router(summary.router)
+app.include_router(rename_rules.router)
 
 
 @app.get("/health")

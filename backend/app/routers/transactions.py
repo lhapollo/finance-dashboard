@@ -9,6 +9,7 @@ from app.db import get_session
 from app.models import Transaction
 from app.schemas import RecategorizeResult, TransactionOut, TransactionPage, TransactionUpdate
 from app.services.categories import apply_rules
+from app.services.renames import apply_renames, rename_merchant
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -58,16 +59,41 @@ def list_transactions(
     return TransactionPage(items=[TransactionOut.model_validate(t) for t in rows], total=total)
 
 
+@router.get("/{transaction_id}")
+def get_transaction(
+    transaction_id: int, session: Annotated[Session, Depends(get_session)]
+) -> TransactionOut:
+    t = session.get(Transaction, transaction_id)
+    if t is None:
+        raise HTTPException(404, f"no transaction with id {transaction_id}")
+    return TransactionOut.model_validate(t)
+
+
 @router.patch("/{transaction_id}")
 def update_transaction(
     transaction_id: int,
     update: TransactionUpdate,
     session: Annotated[Session, Depends(get_session)],
 ) -> TransactionOut:
-    """Fix a category or transfer flag by hand. Rules and detection won't change it back."""
+    """Fix a name, category or transfer flag by hand. Rules and detection won't change it back."""
     t = session.get(Transaction, transaction_id)
     if t is None:
         raise HTTPException(404, f"no transaction with id {transaction_id}")
+
+    # model_fields_set tells "description: null" (undo the rename) apart from not sending it.
+    if "description" in update.model_fields_set:
+        if update.rename_all:
+            # This row follows the rule too, even if it was renamed by hand before.
+            t.description_source = "auto"
+            rename_merchant(
+                session, t.cleaned_description, update.description or t.cleaned_description
+            )
+        elif update.description is None:
+            t.description_source = "auto"  # back to the rule's name, or the converter's
+            apply_renames(session)
+        else:
+            t.description = update.description
+            t.description_source = "manual"
 
     if update.category is not None:
         t.category = update.category
