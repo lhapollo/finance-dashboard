@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { formatCurrency } from "./format";
+import {
+  addMonths,
+  currentMonth,
+  formatCompactCurrency,
+  formatCurrency,
+  formatDay,
+  formatMonth,
+  formatWholeDollars,
+  monthStarts,
+} from "./format";
 
 describe("formatCurrency", () => {
   it("formats a purchase (negative) with a minus sign and two decimals", () => {
@@ -17,5 +26,38 @@ describe("formatCurrency", () => {
 
   it("formats zero", () => {
     expect(formatCurrency(0)).toBe("$0.00");
+  });
+});
+
+describe("short money formats", () => {
+  it("drops cents for headline numbers", () => {
+    expect(formatWholeDollars(140216)).toBe("$1,402");
+  });
+
+  it("compacts axis labels", () => {
+    expect(formatCompactCurrency(150000)).toBe("$1.5K");
+    expect(formatCompactCurrency(0)).toBe("$0");
+  });
+});
+
+describe("dates", () => {
+  it("doesn't shift the day by timezone", () => {
+    // new Date("2026-10-01") is UTC midnight, which is Sept 30 in Toronto.
+    expect(formatMonth("2026-10-01")).toBe("Oct 2026");
+    expect(formatDay("2026-10-01")).toBe("Oct 1");
+  });
+
+  it("adds and subtracts months across year boundaries", () => {
+    expect(addMonths("2026-01", -1)).toBe("2025-12");
+    expect(addMonths("2026-12", 1)).toBe("2027-01");
+    expect(addMonths("2026-10", -12)).toBe("2025-10");
+  });
+
+  it("lists the month starts ending with a month", () => {
+    expect(monthStarts("2026-01", 3)).toEqual(["2025-11-01", "2025-12-01", "2026-01-01"]);
+  });
+
+  it("formats the current month as YYYY-MM", () => {
+    expect(currentMonth(new Date(2026, 0, 31))).toBe("2026-01");
   });
 });

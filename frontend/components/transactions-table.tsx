@@ -1,0 +1,260 @@
+"use client";
+
+import { useState } from "react";
+
+import { TransactionDetails } from "@/components/transaction-details";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { api, query, useApi, type Transaction, type TransactionPage } from "@/lib/api";
+import { ALL_CATEGORIES, categoryColor, categoryLabel } from "@/lib/categories";
+import { formatCurrency, formatDay } from "@/lib/format";
+import { pageIndex } from "@/lib/transactions";
+import { cn } from "@/lib/utils";
+
+export type TransactionFilters = {
+  account_id?: number;
+  category?: string;
+  start?: string;
+  end?: string;
+  search?: string;
+};
+
+const CATEGORY_ITEMS = Object.fromEntries(ALL_CATEGORIES.map((c) => [c, categoryLabel(c)]));
+
+/**
+ * Transactions, newest first, with the category and the transfer flag editable in place.
+ * An edit is saved straight away and locks that field against the rules. `onEdited` lets
+ * the page refresh totals that the edit changed.
+ */
+export function TransactionsTable({
+  filters = {},
+  pageSize = 25,
+  paged = true,
+  onEdited,
+}: {
+  filters?: TransactionFilters;
+  pageSize?: number;
+  paged?: boolean;
+  onEdited?: () => void;
+}) {
+  const [page, setPage] = useState(0);
+  // Back to page 1 whenever the filters change. (Adjusting state during render is React's
+  // recommended way to reset state on a prop change, rather than an effect.)
+  const filterKey = JSON.stringify(filters);
+  const [lastFilterKey, setLastFilterKey] = useState(filterKey);
+  if (filterKey !== lastFilterKey) {
+    setLastFilterKey(filterKey);
+    setPage(0);
+  }
+
+  const { data, error, reload } = useApi<TransactionPage>(
+    `/transactions${query({ ...filters, limit: pageSize, offset: page * pageSize })}`,
+  );
+  const [saving, setSaving] = useState<number | null>(null);
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  async function save(t: Transaction, change: { category?: string; is_transfer?: boolean }) {
+    setSaving(t.id);
+    setSaveError(null);
+    try {
+      await api(`/transactions/${t.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(change),
+      });
+      reload();
+      onEdited?.();
+    } catch (e) {
+      setSaveError(`Couldn't save "${t.description}": ${(e as Error).message}`);
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  if (error) return <p className="text-sm text-destructive">{error}</p>;
+  if (!data) {
+    return (
+      <div className="flex flex-col gap-2">
+        {Array.from({ length: 6 }, (_, i) => (
+          <Skeleton key={i} className="h-9 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  const pages = Math.max(1, Math.ceil(data.total / pageSize));
+
+  return (
+    <div className="flex flex-col gap-3">
+      {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-20">Date</TableHead>
+            <TableHead>Description</TableHead>
+            <TableHead className="w-44">Category</TableHead>
+            <TableHead className="w-28 text-right">Amount</TableHead>
+            <TableHead className="w-24 text-center">Transfer</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {data.items.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                No transactions match.
+              </TableCell>
+            </TableRow>
+          )}
+          {data.items.map((t) => (
+            <TableRow key={t.id} className={cn(saving === t.id && "opacity-60")}>
+              <TableCell className="text-muted-foreground tabular">{formatDay(t.date)}</TableCell>
+              <TableCell className="max-w-64">
+                {/* Opens the details panel; the bank's exact text shows on hover too. */}
+                <button
+                  type="button"
+                  onClick={() => setOpenId(t.id)}
+                  title={t.raw_description}
+                  className="block max-w-full truncate text-left hover:underline"
+                >
+                  {t.description}
+                </button>
+              </TableCell>
+              <TableCell>
+                {t.is_transfer ? (
+                  <span className="text-xs text-muted-foreground">Not counted</span>
+                ) : (
+                  <Select
+                    items={{ ...CATEGORY_ITEMS, [t.category]: categoryLabel(t.category) }}
+                    value={t.category}
+                    onValueChange={(category) =>
+                      category && category !== t.category && save(t, { category })
+                    }
+                    disabled={saving === t.id}
+                  >
+                    <SelectTrigger size="sm" className="w-40" aria-label={`Category for ${t.description}`}>
+                      <span
+                        className="size-2 shrink-0 rounded-[2px]"
+                        style={{ background: categoryColor(t.category) }}
+                      />
+                      <SelectValue />
+                      {t.category_source === "manual" && (
+                        <Badge variant="secondary" className="ml-auto h-4 px-1 text-[10px]" title="Set by you; rules won't change it">
+                          you
+                        </Badge>
+                      )}
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(CATEGORY_ITEMS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </TableCell>
+              <TableCell
+                className={cn("text-right tabular", t.amount_cents > 0 && "text-positive")}
+              >
+                {formatCurrency(t.amount_cents)}
+              </TableCell>
+              <TableCell className="text-center">
+                <Switch
+                  size="sm"
+                  checked={t.is_transfer}
+                  disabled={saving === t.id}
+                  onCheckedChange={(is_transfer) => save(t, { is_transfer })}
+                  aria-label={`${t.description} is a transfer between my accounts`}
+                />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <TransactionDetails
+        transactionId={openId}
+        onClose={() => setOpenId(null)}
+        onSelect={setOpenId}
+        onChanged={() => {
+          reload();
+          onEdited?.();
+        }}
+      />
+      {paged && pages > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+          <span>{data.total} transactions</span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>
+              Previous
+            </Button>
+            {/* Keyed on the page so the box shows the new number after Previous/Next. */}
+            <PageJump key={page} page={page} pages={pages} onJump={setPage} />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page + 1 >= pages}
+              onClick={() => setPage(page + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** "Page [3] of 16": type a page number and press Enter (or click away) to go there. */
+function PageJump({
+  page,
+  pages,
+  onJump,
+}: {
+  page: number;
+  pages: number;
+  onJump: (page: number) => void;
+}) {
+  const [text, setText] = useState(String(page + 1));
+
+  function go() {
+    const target = pageIndex(text, pages);
+    if (target === null) setText(String(page + 1)); // not a number: put the current page back
+    else if (target !== page) onJump(target);
+    else setText(String(page + 1)); // e.g. "99" on the last page: show what it clamped to
+  }
+
+  return (
+    <form
+      className="flex items-center gap-1.5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        go();
+      }}
+    >
+      <span>Page</span>
+      <Input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={go}
+        onFocus={(e) => e.target.select()}
+        inputMode="numeric"
+        aria-label={`Page number, 1 to ${pages}`}
+        className="h-7 w-12 px-1 text-center tabular"
+      />
+      <span>of {pages}</span>
+    </form>
+  );
+}
