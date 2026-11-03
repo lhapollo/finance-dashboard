@@ -27,6 +27,10 @@ export const ALL_CATEGORIES = [
   "home",
   "fees",
   "rewards",
+  "taxes",
+  "cash",
+  "e-transfers",
+  "income",
   "uncategorized",
 ] as const;
 

@@ -8,11 +8,26 @@ from sqlalchemy.orm import Session
 
 from app.models import Transaction
 
-MAX_DAYS_APART = 3  # a payment can take a few business days to land on the other side
+# A payment can take a few business days to land on the other side. CIBC credits a payment
+# up to 4 days before Tangerine withdraws it when a weekend is in between.
+MAX_DAYS_APART = 5
 
 # How a credit card bill payment shows up on the card's own statement (checked against CIBC's
 # real export). Anchored at the start, so a purchase like "DRIVE TEST PAYMENT" doesn't match.
 _CARD_PAYMENT = re.compile(r"^(PRE[- ]?AUTHORIZED PAYMENT|PAYMENT THANK YOU)", re.IGNORECASE)
+
+# Money a bank account sends to (or gets from) another of my own accounts, recognizable from
+# the bank side alone (checked against Tangerine's real export). Paying off a card or credit
+# line counts too: like a card payment, the spending happened when the card was used.
+_OWN_TRANSFER = re.compile(
+    r"^("
+    r"(Recurring )?Internet (Deposit from|Withdrawal to) Tangerine"  # between Tangerine accounts
+    r"|Tangerine Credit Card Payment"
+    r"|EFT Withdrawal to WS Investments"  # to Wealthsimple
+    r"|Bill Payment - .*(VISA|MASTERCARD|LINE OF CREDIT|AMERICAN EXPRESS|AMEX)"
+    r")",
+    re.IGNORECASE,
+)
 
 
 def detect_transfers(session: Session) -> int:
@@ -26,10 +41,10 @@ def detect_transfers(session: Session) -> int:
     ).all()
     before = sum(t.is_transfer for t in rows)
 
-    # 1. Credit card payments. The other side (the bank account it was paid from) may not be
-    #    imported yet, but the card side is recognizable on its own.
+    # 1. Transfers recognizable from one side alone: card payments as the card sees them, and
+    #    bank-side moves to my own accounts. The other side may not be imported (yet).
     for t in rows:
-        if is_card_payment(t):
+        if is_card_payment(t) or is_own_transfer(t):
             t.is_transfer = True
 
     # 2. Pair up the two sides of a transfer between two imported accounts.
@@ -44,6 +59,10 @@ def is_card_payment(t: Transaction) -> bool:
         and t.amount_cents > 0
         and _CARD_PAYMENT.match(t.raw_description) is not None
     )
+
+
+def is_own_transfer(t: Transaction) -> bool:
+    return t.account.type != "credit" and _OWN_TRANSFER.match(t.raw_description) is not None
 
 
 def _pair(rows: list[Transaction]) -> None:

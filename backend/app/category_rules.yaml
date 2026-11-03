@@ -10,6 +10,7 @@
 
 groceries:
   - T&T
+  - T T SUPERMARKET  # how Interac writes T&T
   - LOBLAW*
   - NOFRILLS
   - NO FRILLS
@@ -170,6 +171,7 @@ entertainment:
   - TICKETMASTER
   - TMCANADA
   - SEATGEEK
+  - STUBHUB
   - EVENTBRITE
   - ESCAPE ROOM
   - CA WONDERLAND
@@ -214,3 +216,19 @@ fees:
 
 rewards:
   - CASHBACK
+
+taxes:
+  - "PAY TO: CRA"
+
+cash:
+  - ABM  # bank machine withdrawals
+
+e-transfers:
+  - E-TRANSFER  # money sent to or from people; often a share of a bill
+
+income:
+  - INTEREST PAID
+  - BONUS PAYOUT
+  - RIPPLING  # payroll provider
+  - EFT DEPOSIT FROM CANADA  # government payments, e.g. tax refunds
+  - CAD ESSENTIALS

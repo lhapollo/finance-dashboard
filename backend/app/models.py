@@ -12,7 +12,7 @@ class Account(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True)
     institution: Mapped[str] = mapped_column(String(100))
-    type: Mapped[str] = mapped_column(String(20))  # credit / savings / investment
+    type: Mapped[str] = mapped_column(String(20))  # credit / chequing / savings / investment
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="account")
 

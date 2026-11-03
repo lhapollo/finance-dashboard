@@ -43,3 +43,50 @@ def title_case(text: str) -> str:
         w if i > 0 and w in _SMALL_WORDS else _WORD_START.sub(lambda m: m[1] + m[2].upper(), w)
         for i, w in enumerate(words)
     )
+
+
+# --- Description cleanup -------------------------------------------------------------------
+# Card descriptions are "<merchant> <city>, <province>" (converters reshape theirs to match).
+# There's no separator between merchant and city, so cities with a space in them are listed
+# here; otherwise the city is the last word.
+_MULTI_WORD_CITIES = {
+    "NORTH YORK",
+    "RICHMOND HILL",
+    "RICHMOND H",  # Tangerine cuts it off
+    "BLUE MOUNTAIN",
+    "NEW YORK",
+    "NEW JERSEY",
+    "NIAGARA FALLS",
+}
+_FOREIGN_AMOUNT = re.compile(r"\s+\d*\.\d{2} [A-Z]{3} @ [\d.]+$")  # "3.00 USD @ 1.393333"
+_PROVINCE = re.compile(r",\s*[A-Z]{2}$")  # ", ON"
+_PROCESSOR_PREFIX = re.compile(r"^(SQ \*|TST-|WL \*|PAYPAL \*)\s*", re.IGNORECASE)
+_STORE_NUMBER = re.compile(r"\s*#\s*\d+")  # "#40359"
+_ORDER_CODE = re.compile(r"\s*[*/]\s*\S*\d\S*")  # "CA*531WG1200", "APPL/5GH8LFW8JV"
+_TRAILING_JUNK = re.compile(
+    r"(\s+(\d[\d-]{5,}|[A-Z0-9]*\d[A-Z0-9]{5,}|\d+))+$"  # phone numbers, reference codes
+)
+
+
+def clean_description(raw: str) -> str:
+    """'MCDONALD'S #40359 NORTH YORK, ON' -> "Mcdonald's". Good enough, not perfect:
+    raw_description keeps the original, so a bad cleanup never loses information."""
+    text = " ".join(raw.split())
+    text = _FOREIGN_AMOUNT.sub("", text)
+
+    if _PROVINCE.search(text):
+        text = _PROVINCE.sub("", text)
+        for city in _MULTI_WORD_CITIES:
+            if text.upper().endswith(" " + city):
+                text = text[: -len(city) - 1]
+                break
+        else:
+            text = text.rsplit(" ", 1)[0] if " " in text else text
+
+    text = _PROCESSOR_PREFIX.sub("", text)
+    text = _STORE_NUMBER.sub("", text)
+    text = _ORDER_CODE.sub("", text)
+    text = _TRAILING_JUNK.sub("", text)
+    text = text.strip(" -*#")
+
+    return title_case(text) if text else title_case(raw)

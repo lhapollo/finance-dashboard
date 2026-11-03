@@ -100,7 +100,10 @@ def test_spending_over_time_by_year(client, october):
 def test_list_accounts(client):
     body = client.get("/accounts").json()
 
-    assert body == [{"id": 1, "name": "CIBC Credit Card", "institution": "CIBC", "type": "credit"}]
+    assert [(a["name"], a["institution"], a["type"]) for a in body] == [
+        ("CIBC Credit Card", "CIBC", "credit"),
+        ("Tangerine Chequing", "Tangerine", "chequing"),
+    ]
 
 
 def test_list_transactions_newest_first(client, october):

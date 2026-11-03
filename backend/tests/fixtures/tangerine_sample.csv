@@ -1,0 +1,12 @@
+Date,Transaction,Name,Memo,Amount
+10/01/2026,OTHER,EFT Deposit from Rippling Canada,EFT Deposit from Rippling Canada,2500.00
+10/02/2026,DEBIT,Internet Withdrawal to Tangerine,Internet Withdrawal to Tangerine Savings Account - 1234567890,-1000.00
+10/03/2026,OTHER,Interac - Purchase - LOBLAWS #1,Interac - Purchase - LOBLAWS #1042 TORONTO  ON  CA,-46.18
+10/03/2026,OTHER,Interac - Purchase - LOBLAWS #1,Interac - Purchase - LOBLAWS #1042 TORONTO  ON  CA,-46.18
+10/05/2026,OTHER,INTERAC e-Transfer To: Sam Exam,INTERAC e-Transfer To: Sam Example,-20.00
+10/06/2026,OTHER,INTERAC e-Transfer From: SAM EXA,INTERAC e-Transfer From: SAM EXAMPLE,15.00
+10/08/2026,OTHER,Posted :07 Oct 2026,Posted :07 Oct 2026,0.00
+
+10/13/2026,OTHER,Visa Debit - Purchase - STUBHUB,Visa Debit - Purchase - STUBHUB CANADA LTD TORONTO  CA,-120.00
+10/15/2026,OTHER,EFT Withdrawal to CIBC CPD,EFT Withdrawal to CIBC CPD,-812.40
+10/31/2026,OTHER,Interest Paid,Interest Paid,0.01

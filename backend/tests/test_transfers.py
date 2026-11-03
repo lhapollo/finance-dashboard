@@ -75,9 +75,19 @@ def test_bank_side_of_card_payment_pairs_with_card_side(db_session, card, saving
     assert withdrawal.is_transfer
 
 
+def test_card_credited_before_the_bank_withdraws(db_session, card, savings, add):
+    """Real CIBC/Tangerine case: the card shows the payment 4 days before the bank does."""
+    payment = add(card, 10, 26125, "PRE-AUTHORIZED PAYMENT - THANK YOU")
+    withdrawal = add(savings, 14, -26125, "EFT WITHDRAWAL TO CIBC CPD")
+
+    detect_transfers(db_session)
+
+    assert payment.transfer_pair_id == withdrawal.id
+
+
 def test_too_far_apart_is_not_paired(db_session, savings, investing, add):
     out = add(savings, 1, -50000)
-    arrived = add(investing, 5, 50000)
+    arrived = add(investing, 7, 50000)
 
     assert detect_transfers(db_session) == 0
     assert not out.is_transfer and not arrived.is_transfer

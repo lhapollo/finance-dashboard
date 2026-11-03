@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from app.importers.cibc import clean_description, parse_cibc
-from app.importers.common import ImportFormatError, dollars_to_cents
+from app.importers.cibc import parse_cibc
+from app.importers.common import ImportFormatError, clean_description, dollars_to_cents
 from app.services.fingerprint import fingerprints
 
 SAMPLE = Path(__file__).parent / "fixtures" / "cibc_sample.csv"
