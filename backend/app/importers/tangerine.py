@@ -1,18 +1,23 @@
-"""Tangerine chequing CSV -> StandardTransaction.
+"""Tangerine CSVs -> StandardTransaction: chequing and the Mastercard.
 
-What Tangerine's export looks like (checked against a real download, Oct 2026):
-- A header row: Date,Transaction,Name,Memo,Amount.
+Both exports (checked against real downloads, Oct/Nov 2026) share a shape:
+- A header row, then Transaction type, Name, Memo and Amount columns.
 - Dates are MM/DD/YYYY (month first: rows like 10/15/2023 rule out day first).
 - Amount is already signed our way: negative = money out.
-- Name is Memo cut off at 32 characters, so Memo is the description we keep.
-- Some rows are notes with a 0.00 amount ("Posted :26 Nov 2023", a zero "Interest Paid").
-  They aren't transactions, so they're skipped.
-- Rows are oldest first, but not strictly (a reversal can appear after later rows).
+
+Where they differ:
+- Chequing: the header starts "Date". Name is Memo cut off at 32 characters, so Memo is the
+  description we keep. Some rows are notes with a 0.00 amount ("Posted :26 Nov 2023", a zero
+  "Interest Paid"); they aren't transactions, so they're skipped. Rows are oldest first.
+- Mastercard: the header starts "Transaction date". Name is the merchant and place, cut off at
+  32 characters ("SANSOTEI RAMEN ADELAID TORONTO O"); Memo is rewards info ("Rewards earned:
+  0.52 ~ Category: Restaurant"), so Name is the description we keep. Newest first, and each
+  statement period downloads as its own file.
 """
 
 import csv
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import datetime
 
 from pydantic import ValidationError
@@ -20,17 +25,34 @@ from pydantic import ValidationError
 from app.importers.common import ImportFormatError, clean_description, dollars_to_cents, title_case
 from app.schemas import StandardTransaction
 
-HEADER = ["Date", "Transaction", "Name", "Memo", "Amount"]
+CHEQUING_HEADER = ["Date", "Transaction", "Name", "Memo", "Amount"]
+CARD_HEADER = ["Transaction date", "Transaction", "Name", "Memo", "Amount"]
 
 
 def parse_tangerine(lines: Iterable[str]) -> list[StandardTransaction]:
-    """Convert every row of a Tangerine CSV. Raises ImportFormatError on the first bad row."""
+    """Tangerine chequing. Raises ImportFormatError on the first bad row."""
+    # Memo kept exactly as written: its double spaces separate merchant and province.
+    return _parse(
+        lines, CHEQUING_HEADER, lambda name, memo: (memo or name).strip(), clean_tangerine
+    )
+
+
+def parse_tangerine_card(lines: Iterable[str]) -> list[StandardTransaction]:
+    """Tangerine Mastercard. Raises ImportFormatError on the first bad row."""
+    return _parse(lines, CARD_HEADER, lambda name, memo: name.strip(), clean_tangerine_card)
+
+
+def _parse(
+    lines: Iterable[str],
+    header: list[str],
+    pick_raw: Callable[[str, str], str],
+    clean: Callable[[str], str],
+) -> list[StandardTransaction]:
     transactions = []
-    rows = enumerate(csv.reader(lines), start=1)
-    for line_no, row in rows:
+    for line_no, row in enumerate(csv.reader(lines), start=1):
         if line_no == 1:
-            if [cell.strip() for cell in row] != HEADER:
-                raise ImportFormatError(1, f"expected the header {','.join(HEADER)}")
+            if [cell.strip() for cell in row] != header:
+                raise ImportFormatError(1, f"expected the header {','.join(header)}")
             continue
         if not any(cell.strip() for cell in row):
             continue  # blank line
@@ -49,13 +71,12 @@ def parse_tangerine(lines: Iterable[str]) -> list[StandardTransaction]:
         if amount_cents == 0:
             continue  # a note, not a transaction
 
-        # Kept exactly as written: its double spaces are what separate merchant and province.
-        raw_description = (memo or name).strip()
+        raw_description = pick_raw(name, memo)
         try:
             transactions.append(
                 StandardTransaction(
                     date=txn_date,
-                    description=clean_tangerine(raw_description),
+                    description=clean(raw_description),
                     raw_description=raw_description,
                     amount_cents=amount_cents,
                 )
@@ -109,3 +130,16 @@ def clean_tangerine(raw: str) -> str:
         who = title_case(m["who"])
         return who if m["kind"].lower() == "deposit" else f"Payment to {who}"
     return title_case(_ACCOUNT_NUMBER.sub("", raw))
+
+
+# Mastercard names end "<city> <province>" with no comma, and the 32-character cut can leave
+# the province as one letter ("TORONTO O") or remove it ("NORTH YOR").
+_CARD_PROVINCE = re.compile(r" (?P<province>[A-Z]{1,2})$")
+
+
+def clean_tangerine_card(raw: str) -> str:
+    """'SANSOTEI RAMEN ADELAID TORONTO O' -> 'Sansotei Ramen Adelaid'."""
+    text = " ".join(raw.split())
+    if m := _CARD_PROVINCE.search(text):
+        text = f"{text[: m.start()]}, {m['province']}"
+    return clean_description(text)

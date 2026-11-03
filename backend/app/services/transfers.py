@@ -13,8 +13,9 @@ from app.models import Transaction
 MAX_DAYS_APART = 5
 
 # How a credit card bill payment shows up on the card's own statement (checked against CIBC's
-# real export). Anchored at the start, so a purchase like "DRIVE TEST PAYMENT" doesn't match.
-_CARD_PAYMENT = re.compile(r"^(PRE[- ]?AUTHORIZED PAYMENT|PAYMENT THANK YOU)", re.IGNORECASE)
+# and Tangerine's real exports: "PAYMENT THANK YOU", "PAYMENT - THANK YOU"). Anchored at the
+# start, so a purchase like "DRIVE TEST PAYMENT" doesn't match.
+_CARD_PAYMENT = re.compile(r"^(PRE[- ]?AUTHORIZED PAYMENT|PAYMENT (- )?THANK YOU)", re.IGNORECASE)
 
 # Money a bank account sends to (or gets from) another of my own accounts, recognizable from
 # the bank side alone (checked against Tangerine's real export). Paying off a card or credit

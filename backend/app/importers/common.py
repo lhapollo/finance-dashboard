@@ -59,7 +59,7 @@ _MULTI_WORD_CITIES = {
     "NIAGARA FALLS",
 }
 _FOREIGN_AMOUNT = re.compile(r"\s+\d*\.\d{2} [A-Z]{3} @ [\d.]+$")  # "3.00 USD @ 1.393333"
-_PROVINCE = re.compile(r",\s*[A-Z]{2}$")  # ", ON"
+_PROVINCE = re.compile(r",\s*[A-Z]{1,2}$")  # ", ON", or ", O" when a 32-character cut split it
 _PROCESSOR_PREFIX = re.compile(r"^(SQ \*|TST-|WL \*|PAYPAL \*)\s*", re.IGNORECASE)
 _STORE_NUMBER = re.compile(r"\s*#\s*\d+")  # "#40359"
 _ORDER_CODE = re.compile(r"\s*[*/]\s*\S*\d\S*")  # "CA*531WG1200", "APPL/5GH8LFW8JV"

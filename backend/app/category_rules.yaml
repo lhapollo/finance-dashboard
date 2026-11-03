@@ -39,6 +39,7 @@ dining:
   - CHIPOTLE
   - SHAKE SHACK
   - POPEYES
+  - CHICK-FIL-A
   - WENDYS
   - WENDY'S
   - A&W
@@ -67,6 +68,7 @@ dining:
   - BEAVERTAILS
   - CINNAHOLIC
   - CHATIME
+  - RFBT  # Real Fruit Bubble Tea
   - TAHINIS
   - CONCESSIONS
   - MAD RADISH
@@ -86,6 +88,7 @@ dining:
   - TEA
   - JUICE
   - YOGURT
+  - GELATO
   - PIZZA
   - BURGER*
   - BURRITO*
@@ -118,6 +121,7 @@ transport:
   - GO TRANSIT
   - TTC
   - ESSO
+  - CIRCLE K  # mostly gas stations
   - PETRO-CANADA
   - SHELL
   - NEURON MOBILITY
@@ -137,6 +141,7 @@ shopping:
   - OLD NAVY
   - BLUENOTES
   - WINNERS
+  - WAGJAG  # deals site
   - SPORT CHEK
   - CANADIAN TIRE
   - HOME DEPOT
@@ -195,6 +200,8 @@ health:
   - THE BODY SHOP
   - DENTISTRY
   - DENTAL
+  - HAIR
+  - SALON*
 
 travel:
   - AIRALO

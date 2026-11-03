@@ -5,7 +5,12 @@ import pytest
 from sqlalchemy import select
 
 from app.importers.common import ImportFormatError
-from app.importers.tangerine import clean_tangerine, parse_tangerine
+from app.importers.tangerine import (
+    clean_tangerine,
+    clean_tangerine_card,
+    parse_tangerine,
+    parse_tangerine_card,
+)
 from app.models import Account, Transaction
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -138,3 +143,69 @@ def test_reimporting_skips_everything(client, chequing):
     upload(client, chequing, SAMPLE)
 
     assert upload(client, chequing, SAMPLE).json() == {"inserted": 0, "skipped": 9}
+
+
+# --- Mastercard ----------------------------------------------------------------------------
+
+CARD_SAMPLE = FIXTURES / "tangerine_card_sample.csv"
+
+
+@pytest.fixture
+def card_sample():
+    with CARD_SAMPLE.open(newline="") as f:
+        return parse_tangerine_card(f)
+
+
+@pytest.fixture
+def mastercard(db_session):
+    """The account that migration 7 seeds."""
+    return db_session.scalar(select(Account).where(Account.name == "Tangerine Mastercard"))
+
+
+def test_card_rows(card_sample):
+    assert len(card_sample) == 6
+    uber = card_sample[0]
+    assert (uber.date, uber.amount_cents) == (date(2026, 10, 31), -8095)
+    assert uber.raw_description == "UBER CANADA/UBERTRIP TORONTO ON"  # Name, not the rewards memo
+    assert card_sample[2].amount_cents == 53711  # the payment is money in
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("ZEN KYOTO TORONTO ON", "Zen Kyoto"),
+        ("SANSOTEI RAMEN ADELAID TORONTO O", "Sansotei Ramen Adelaid"),  # province cut to "O"
+        ("SQ *THE POKE BOX TORON Toronto O", "The Poke Box Toron"),
+        ("Heytea Markham ON", "Heytea"),
+        ("DOLLARAMA # 652 TORONTO ON", "Dollarama"),
+        ("CHIPOTLE ONLINE HALIFAX NS", "Chipotle Online"),
+        ("PAYMENT - THANK YOU", "Payment - Thank You"),
+    ],
+)
+def test_clean_tangerine_card(raw, expected):
+    assert clean_tangerine_card(raw) == expected
+
+
+def test_card_and_chequing_files_are_told_apart():
+    """Each parser checks its header, so uploading to the wrong account fails loudly."""
+    with pytest.raises(ImportFormatError, match="Transaction date"):
+        parse_tangerine_card(SAMPLE.read_text().splitlines())
+    with pytest.raises(ImportFormatError, match="expected the header Date,"):
+        parse_tangerine(CARD_SAMPLE.read_text().splitlines())
+
+
+def test_card_payment_pairs_with_chequing(client, db_session, chequing, mastercard, add):
+    withdrawal = add(chequing, 28, -53711, "Tangerine Credit Card Payment")
+
+    response = upload(client, mastercard, CARD_SAMPLE)
+
+    assert response.json() == {"inserted": 6, "skipped": 0}
+    payment = db_session.scalar(
+        select(Transaction).where(Transaction.raw_description == "PAYMENT - THANK YOU")
+    )
+    assert payment.is_transfer and payment.transfer_pair_id == withdrawal.id
+    assert withdrawal.transfer_pair_id == payment.id
+    heytea = db_session.scalars(
+        select(Transaction).where(Transaction.cleaned_description == "Heytea")
+    ).all()
+    assert len(heytea) == 2 and heytea[0].category == "dining"

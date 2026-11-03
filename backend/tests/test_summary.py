@@ -103,6 +103,7 @@ def test_list_accounts(client):
     assert [(a["name"], a["institution"], a["type"]) for a in body] == [
         ("CIBC Credit Card", "CIBC", "credit"),
         ("Tangerine Chequing", "Tangerine", "chequing"),
+        ("Tangerine Mastercard", "Tangerine", "credit"),
     ]
 
 
