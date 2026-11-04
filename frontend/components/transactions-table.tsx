@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
 import { useState } from "react";
 
 import { TransactionDetails } from "@/components/transaction-details";
@@ -29,7 +30,10 @@ export type TransactionFilters = {
   start?: string;
   end?: string;
   search?: string;
+  order?: SortOrder;
 };
+
+export type SortOrder = "desc" | "asc"; // newest first / oldest first
 
 const CATEGORY_ITEMS = Object.fromEntries(ALL_CATEGORIES.map((c) => [c, categoryLabel(c)]));
 
@@ -43,11 +47,14 @@ export function TransactionsTable({
   pageSize = 25,
   paged = true,
   onEdited,
+  onOrderChange,
 }: {
   filters?: TransactionFilters;
   pageSize?: number;
   paged?: boolean;
   onEdited?: () => void;
+  /** When given, the Date header becomes a button that flips the sort order. */
+  onOrderChange?: (order: SortOrder) => void;
 }) {
   const [page, setPage] = useState(0);
   // Back to page 1 whenever the filters change. (Adjusting state during render is React's
@@ -103,7 +110,28 @@ export function TransactionsTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-20">Date</TableHead>
+            <TableHead
+              className="w-24"
+              aria-sort={(filters.order ?? "desc") === "desc" ? "descending" : "ascending"}
+            >
+              {onOrderChange ? (
+                <button
+                  type="button"
+                  onClick={() => onOrderChange(filters.order === "asc" ? "desc" : "asc")}
+                  className="-ml-1 flex items-center gap-1 rounded px-1 hover:bg-muted"
+                  title={filters.order === "asc" ? "Oldest first: click for newest first" : "Newest first: click for oldest first"}
+                >
+                  Date
+                  {filters.order === "asc" ? (
+                    <ArrowUpIcon className="size-3.5" />
+                  ) : (
+                    <ArrowDownIcon className="size-3.5" />
+                  )}
+                </button>
+              ) : (
+                "Date"
+              )}
+            </TableHead>
             <TableHead>Description</TableHead>
             <TableHead className="w-44">Category</TableHead>
             <TableHead className="w-28 text-right">Amount</TableHead>

@@ -143,3 +143,13 @@ def test_list_transactions_paging(client, october):
     ids = [t["id"] for t in first["items"] + second["items"]]
     assert len(ids) == len(set(ids)) == 8
     assert second["total"] == 9
+
+
+def test_list_transactions_oldest_first(client, october):
+    body = client.get("/transactions", params={"order": "asc", "limit": 3}).json()
+
+    assert [t["raw_description"] for t in body["items"]] == ["LAST YEAR", "SEPTEMBER", "LOBLAWS"]
+
+
+def test_list_transactions_rejects_unknown_order(client):
+    assert client.get("/transactions", params={"order": "sideways"}).status_code == 422

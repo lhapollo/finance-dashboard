@@ -3,13 +3,18 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
-import { TransactionsTable, type TransactionFilters } from "@/components/transactions-table";
+import {
+  TransactionsTable,
+  type SortOrder,
+  type TransactionFilters,
+} from "@/components/transactions-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { query } from "@/lib/api";
 import { categoryLabel } from "@/lib/categories";
-import { formatDay } from "@/lib/format";
+import { addDays, datePresets, type DateRange } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 export default function TransactionsPage() {
   return (
@@ -23,7 +28,8 @@ export default function TransactionsPage() {
   );
 }
 
-/** Filters live in the URL, so a link like /transactions?category=dining opens filtered. */
+/** Filters live in the URL, so a link like /transactions?category=dining opens filtered,
+ * and a refresh or a bookmark keeps them. */
 function FilteredTransactions() {
   const params = useSearchParams();
   const router = useRouter();
@@ -34,17 +40,22 @@ function FilteredTransactions() {
     start: params.get("start") ?? undefined,
     end: params.get("end") ?? undefined,
     search: params.get("search") ?? undefined,
+    order: params.get("order") === "asc" ? "asc" : undefined, // newest first is the default
   };
   const [search, setSearch] = useState(filters.search ?? "");
 
   const setFilters = (next: TransactionFilters) =>
     router.replace(`${pathname}${query(next)}`, { scroll: false });
+  const setRange = (range: DateRange) => setFilters({ ...filters, ...range });
 
-  const active = [
-    filters.category && `Category: ${categoryLabel(filters.category)}`,
-    filters.start && `From ${formatDay(filters.start)}`,
-    filters.end && `Before ${formatDay(filters.end)}`, // end itself isn't included
-  ].filter(Boolean);
+  // The API's end date is excluded; the "To" box shows the last day that's included.
+  const toInclusive = filters.end ? addDays(filters.end, -1) : "";
+  const presets = datePresets();
+  const activePreset = presets.find(
+    (p) => p.range.start === filters.start && p.range.end === filters.end,
+  )?.label;
+
+  const anyFilter = filters.category || filters.start || filters.end || filters.search;
 
   return (
     <Card>
@@ -66,26 +77,77 @@ function FilteredTransactions() {
           <Button type="submit" variant="outline" size="sm">
             Search
           </Button>
-          {active.map((label) => (
-            <span key={label as string} className="rounded-md bg-muted px-2 py-1 text-xs">
-              {label}
+          {filters.category && (
+            <span className="rounded-md bg-muted px-2 py-1 text-xs">
+              Category: {categoryLabel(filters.category)}
             </span>
-          ))}
-          {(active.length > 0 || filters.search) && (
+          )}
+          {anyFilter && (
             <Button
               type="button"
               variant="ghost"
               size="sm"
               onClick={() => {
                 setSearch("");
-                setFilters({});
+                setFilters({ order: filters.order });
               }}
             >
               Clear filters
             </Button>
           )}
         </form>
-        <TransactionsTable filters={filters} />
+
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1.5 text-muted-foreground">
+              From
+              <Input
+                type="date"
+                value={filters.start ?? ""}
+                max={toInclusive || undefined}
+                onChange={(e) => setRange({ start: e.target.value || undefined, end: filters.end })}
+                className="h-8 w-40"
+              />
+            </label>
+            <label className="flex items-center gap-1.5 text-muted-foreground">
+              To
+              <Input
+                type="date"
+                value={toInclusive}
+                min={filters.start}
+                onChange={(e) =>
+                  setRange({
+                    start: filters.start,
+                    end: e.target.value ? addDays(e.target.value, 1) : undefined,
+                  })
+                }
+                className="h-8 w-40"
+              />
+            </label>
+          </div>
+          <div className="flex flex-wrap gap-1" role="group" aria-label="Date presets">
+            {presets.map(({ label, range }) => (
+              <Button
+                key={label}
+                type="button"
+                size="xs"
+                variant={activePreset === label ? "secondary" : "ghost"}
+                aria-pressed={activePreset === label}
+                className={cn(activePreset === label && "font-medium")}
+                onClick={() => setRange(range)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <TransactionsTable
+          filters={filters}
+          onOrderChange={(order: SortOrder) =>
+            setFilters({ ...filters, order: order === "asc" ? "asc" : undefined })
+          }
+        />
       </CardContent>
     </Card>
   );

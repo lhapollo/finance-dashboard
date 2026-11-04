@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  addDays,
   addMonths,
+  datePresets,
+  toIsoDate,
   currentMonth,
   formatCompactCurrency,
   formatCurrency,
@@ -44,7 +47,11 @@ describe("dates", () => {
   it("doesn't shift the day by timezone", () => {
     // new Date("2026-10-01") is UTC midnight, which is Sept 30 in Toronto.
     expect(formatMonth("2026-10-01")).toBe("Oct 2026");
-    expect(formatDay("2026-10-01")).toBe("Oct 1");
+    expect(formatDay("2026-10-01", new Date(2026, 5, 1))).toBe("Oct 1");
+  });
+
+  it("adds the year to days outside the current year", () => {
+    expect(formatDay("2024-10-01", new Date(2026, 5, 1))).toBe("Oct 1, 2024");
   });
 
   it("adds and subtracts months across year boundaries", () => {
@@ -59,5 +66,28 @@ describe("dates", () => {
 
   it("formats the current month as YYYY-MM", () => {
     expect(currentMonth(new Date(2026, 0, 31))).toBe("2026-01");
+  });
+});
+
+describe("date ranges", () => {
+  it("adds days across month and year ends", () => {
+    expect(addDays("2026-10-31", 1)).toBe("2026-11-01");
+    expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
+    expect(addDays("2026-03-01", -1)).toBe("2026-02-28");
+  });
+
+  it("formats dates in local time", () => {
+    expect(toIsoDate(new Date(2026, 0, 5))).toBe("2026-01-05");
+  });
+
+  it("builds presets relative to today, with end excluded", () => {
+    const presets = Object.fromEntries(
+      datePresets(new Date(2026, 0, 15)).map((p) => [p.label, p.range]),
+    );
+    expect(presets["This month"]).toEqual({ start: "2026-01-01", end: "2026-02-01" });
+    expect(presets["Last month"]).toEqual({ start: "2025-12-01", end: "2026-01-01" });
+    expect(presets["Last 3 months"]).toEqual({ start: "2025-11-01", end: "2026-02-01" });
+    expect(presets["This year"]).toEqual({ start: "2026-01-01", end: "2027-01-01" });
+    expect(presets["All time"]).toEqual({});
   });
 });

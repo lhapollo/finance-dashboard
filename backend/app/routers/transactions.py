@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select
@@ -25,9 +25,11 @@ def list_transactions(
     search: Annotated[str | None, Query(max_length=100)] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
+    order: Literal["desc", "asc"] = "desc",
 ) -> TransactionPage:
-    """Newest first. Every filter is optional; start is included, end isn't.
-    `total` is how many rows match, so the table can show "page 2 of 18"."""
+    """Newest first (order=desc), or oldest first (order=asc). Every filter is optional;
+    start is included, end isn't. `total` is how many rows match, so the table can show
+    "page 2 of 18"."""
     filters = []
     if account_id is not None:
         filters.append(Transaction.account_id == account_id)
@@ -52,7 +54,14 @@ def list_transactions(
     rows = session.scalars(
         select(Transaction)
         .where(*filters)
-        .order_by(Transaction.date.desc(), Transaction.id.desc())
+        # id breaks ties within a day, so paging never skips or repeats a row.
+        .order_by(
+            *(
+                (Transaction.date.desc(), Transaction.id.desc())
+                if order == "desc"
+                else (Transaction.date.asc(), Transaction.id.asc())
+            )
+        )
         .limit(limit)
         .offset(offset)
     )
