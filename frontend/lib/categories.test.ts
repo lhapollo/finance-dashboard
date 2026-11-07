@@ -25,6 +25,20 @@ describe("categoryLabel", () => {
 describe("toChartRows", () => {
   const periods = ["2026-09-01", "2026-10-01"];
 
+  it("draws a series that refunds pushed below zero as 0", () => {
+    const rows = toChartRows(
+      [
+        { period: "2026-10-01", category: "dining", total_cents: -260 },
+        { period: "2026-10-01", category: "travel", total_cents: 900 },
+        { period: "2026-10-01", category: "health", total_cents: -300 }, // nets with travel in Other
+      ],
+      periods,
+    );
+
+    expect(rows[1].dining).toBe(0);
+    expect(rows[1][OTHER]).toBe(600);
+  });
+
   it("makes one row per period with a column per series", () => {
     const rows = toChartRows([{ period: "2026-10-01", category: "dining", total_cents: 500 }], periods);
 

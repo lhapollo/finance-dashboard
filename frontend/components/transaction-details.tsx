@@ -8,15 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api, useApi, type Account, type Transaction } from "@/lib/api";
+import { api, query, useApi, type Account, type Transaction, type TransactionPage } from "@/lib/api";
 import { categoryColor, categoryLabel } from "@/lib/categories";
-import { formatCurrency, formatDay, parseDate } from "@/lib/format";
+import { addDays, formatCurrency, formatDay, parseDate } from "@/lib/format";
 import { foreignAmount } from "@/lib/transactions";
 import { cn } from "@/lib/utils";
 
 /**
- * A side panel with everything known about one transaction, where it can also be renamed.
- * `onSelect` opens another transaction in the panel (the other side of a transfer).
+ * A side panel with everything known about one transaction, where it can also be renamed,
+ * and money in can be linked to the purchase it pays back. `onSelect` opens another
+ * transaction in the panel (the other side of a transfer, a payback or its purchase).
  */
 export function TransactionDetails({
   transactionId,
@@ -118,15 +119,43 @@ function Details({
               <span className="flex items-center gap-2">
                 <span
                   className="size-2.5 rounded-[3px]"
-                  style={{ background: categoryColor(t.category) }}
+                  style={{ background: categoryColor(t.counted_category) }}
                 />
-                {categoryLabel(t.category)}
+                {categoryLabel(t.counted_category)}
                 <span className="text-muted-foreground">
-                  · {t.category_source === "manual" ? "set by you" : "from a rule"}
+                  ·{" "}
+                  {t.reimburses_id !== null
+                    ? "same as the purchase it pays back"
+                    : t.category_source === "manual"
+                      ? "set by you"
+                      : "from a rule"}
                 </span>
               </span>
             )}
           </Row>
+          {!t.is_transfer && t.amount_cents > 0 && (
+            <Row label="Pays back">
+              <PaysBack t={t} accounts={accounts} onSelect={onSelect} onSaved={saved} />
+            </Row>
+          )}
+          {t.reimbursement_ids.length > 0 && (
+            <Row label="Paid back">
+              {formatCurrency(t.reimbursed_cents)} of {formatCurrency(-t.amount_cents)}
+              <span className="text-muted-foreground">
+                {" "}
+                · your share {formatCurrency(-t.amount_cents - t.reimbursed_cents)}
+              </span>
+              {t.reimbursement_ids.map((rid) => (
+                <LinkedTransaction
+                  key={rid}
+                  id={rid}
+                  caption="Payback"
+                  accounts={accounts}
+                  onSelect={onSelect}
+                />
+              ))}
+            </Row>
+          )}
           <Row label="Transfer">
             {t.is_transfer ? (
               <>
@@ -136,7 +165,12 @@ function Details({
                   · {t.transfer_source === "manual" ? "marked by you" : "detected automatically"}
                 </span>
                 {t.transfer_pair_id !== null && (
-                  <TransferPartner id={t.transfer_pair_id} accounts={accounts} onSelect={onSelect} />
+                  <LinkedTransaction
+                    id={t.transfer_pair_id}
+                    caption="Other side"
+                    accounts={accounts}
+                    onSelect={onSelect}
+                  />
                 )}
               </>
             ) : (
@@ -164,36 +198,39 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-function TransferPartner({
+/** A button showing another transaction (the other side of a transfer, a payback, the
+ * purchase a payback is for) that opens it in the panel. */
+function LinkedTransaction({
   id,
+  caption,
   accounts,
   onSelect,
 }: {
   id: number;
+  caption: string;
   accounts: Account[] | null;
   onSelect: (id: number) => void;
 }) {
-  const { data: partner } = useApi<Transaction>(`/transactions/${id}`);
-  if (!partner) return null;
-  const account = accounts?.find((a) => a.id === partner.account_id);
+  const { data: other } = useApi<Transaction>(`/transactions/${id}`);
+  if (!other) return null;
+  const account = accounts?.find((a) => a.id === other.account_id);
   return (
     <button
       type="button"
-      onClick={() => onSelect(partner.id)}
+      onClick={() => onSelect(other.id)}
       className="mt-2 block w-full rounded-md border px-3 py-2 text-left hover:bg-muted"
     >
-      <span className="block text-xs text-muted-foreground">Other side</span>
-      {partner.description} · {formatCurrency(partner.amount_cents)}
+      <span className="block text-xs text-muted-foreground">{caption}</span>
+      {other.description} · {formatCurrency(other.amount_cents)}
       <span className="block text-xs text-muted-foreground">
-        {formatDay(partner.date)} · {account?.name}
+        {formatDay(other.date)} · {account?.name}
       </span>
     </button>
   );
 }
 
-function RenameForm({ t, onSaved }: { t: Transaction; onSaved: () => void }) {
-  const [name, setName] = useState(t.description);
-  const [all, setAll] = useState(t.description_source === "rule");
+/** Sends a PATCH for transaction `id`, tracking busy and error state for a form. */
+function usePatch(id: number, onSaved: () => void) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -201,7 +238,7 @@ function RenameForm({ t, onSaved }: { t: Transaction; onSaved: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      await api(`/transactions/${t.id}`, {
+      await api(`/transactions/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -213,6 +250,142 @@ function RenameForm({ t, onSaved }: { t: Transaction; onSaved: () => void }) {
       setBusy(false);
     }
   }
+
+  return { patch, busy, error };
+}
+
+/** On money in: the purchase it pays back, or a way to pick one. */
+function PaysBack({
+  t,
+  accounts,
+  onSelect,
+  onSaved,
+}: {
+  t: Transaction;
+  accounts: Account[] | null;
+  onSelect: (id: number) => void;
+  onSaved: () => void;
+}) {
+  const { patch, busy, error } = usePatch(t.id, onSaved);
+  const [picking, setPicking] = useState(false);
+
+  if (t.reimburses_id !== null) {
+    return (
+      <>
+        <LinkedTransaction id={t.reimburses_id} caption="Purchase" accounts={accounts} onSelect={onSelect} />
+        <button
+          type="button"
+          className="mt-1.5 text-xs text-muted-foreground underline"
+          disabled={busy}
+          onClick={() => patch({ reimburses_id: null })}
+        >
+          Unlink
+        </button>
+        {error && <p className="text-xs text-destructive">{error}</p>}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <span className="text-muted-foreground">Nothing linked</span>
+      {!picking ? (
+        <button type="button" className="ml-2 underline" onClick={() => setPicking(true)}>
+          Link to a purchase
+        </button>
+      ) : (
+        <PurchasePicker
+          payback={t}
+          busy={busy}
+          onPick={(purchaseId) => patch({ reimburses_id: purchaseId })}
+          onCancel={() => setPicking(false)}
+        />
+      )}
+      {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+    </>
+  );
+}
+
+/**
+ * Pick the purchase a payback is for: purchases (money out), newest first. A friend often
+ * pays the same night, before the card posts the charge a day or two later, so the list
+ * starts a week after the payback. A search looks at every date: you know what you want.
+ */
+function PurchasePicker({
+  payback,
+  busy,
+  onPick,
+  onCancel,
+}: {
+  payback: Transaction;
+  busy: boolean;
+  onPick: (purchaseId: number) => void;
+  onCancel: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const searching = search.trim() !== "";
+  const { data, error } = useApi<TransactionPage>(
+    `/transactions${query({
+      money: "out",
+      is_transfer: false,
+      end: searching ? undefined : addDays(payback.date, 8),
+      search: search.trim(),
+      limit: 8,
+    })}`,
+  );
+
+  return (
+    <div className="mt-2 flex flex-col gap-2 rounded-lg border p-2">
+      <Input
+        autoFocus
+        placeholder="Search purchases, e.g. pizza"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        maxLength={100}
+        aria-label="Search purchases"
+      />
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      {data?.items.length === 0 && (
+        <p className="px-1 text-xs text-muted-foreground">No purchases match.</p>
+      )}
+      <ul className="flex flex-col">
+        {data?.items.map((p) => {
+          // What's still owed on it, counting other paybacks (but not this one, if relinking).
+          const left = -p.amount_cents - p.reimbursed_cents;
+          const fits = left >= payback.amount_cents;
+          return (
+            <li key={p.id}>
+              <button
+                type="button"
+                disabled={busy || !fits}
+                onClick={() => onPick(p.id)}
+                className="flex w-full items-baseline justify-between gap-2 rounded-md px-2 py-1.5 text-left hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent"
+                title={fits ? undefined : `Only ${formatCurrency(left)} of it is left to pay back`}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate">{p.description}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {formatDay(p.date)} · {categoryLabel(p.category)}
+                    {p.reimbursed_cents > 0 && ` · ${formatCurrency(p.reimbursed_cents)} back already`}
+                  </span>
+                </span>
+                <span className="shrink-0 tabular">{formatCurrency(p.amount_cents)}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <Button variant="ghost" size="sm" className="self-start" onClick={onCancel}>
+        Cancel
+      </Button>
+    </div>
+  );
+}
+
+function RenameForm({ t, onSaved }: { t: Transaction; onSaved: () => void }) {
+  const [name, setName] = useState(t.description);
+  const [all, setAll] = useState(t.description_source === "rule");
+  const { patch, busy, error } = usePatch(t.id, onSaved);
 
   const unchanged = name.trim() === t.description && all === (t.description_source === "rule");
 

@@ -74,7 +74,7 @@ function Dashboard() {
         <StatCard
           label="Income"
           value={summary ? formatWholeDollars(summary.income_cents) : null}
-          detail="Refunds and cashback until paychecks are imported"
+          detail="Income and cashback. Refunds lower spending instead"
         />
         <StatCard
           label="Net"

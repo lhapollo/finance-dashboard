@@ -35,12 +35,12 @@ def test_add_months(d, months, expected):
 def test_month_summary(client, october):
     body = client.get("/summary/month", params={"month": "2026-10"}).json()
 
-    spent = 4618 + 2000 + 1500 + 500
+    spent = 4618 + 2000 + 1500 + 500 - 2260  # the refund lowers spending
     assert body == {
         "month": "2026-10-01",
         "spent_cents": spent,
-        "income_cents": 2260,  # the refund; the card payment is a transfer
-        "net_cents": 2260 - spent,
+        "income_cents": 0,  # a refund isn't income; the card payment is a transfer
+        "net_cents": -spent,
         "previous_spent_cents": 5000,
         "change_pct": round((spent - 5000) / 5000 * 100, 1),
     }
@@ -65,7 +65,8 @@ def test_spending_by_category(client, october):
 
     assert body == [
         {"category": "groceries", "total_cents": 6618},
-        {"category": "dining", "total_cents": 2000},  # money out only, refund not subtracted
+        # 1500 + 500 spent, minus a 2260 refund for something bought before October
+        {"category": "dining", "total_cents": -260},
     ]
 
 
@@ -83,7 +84,7 @@ def test_spending_over_time_by_month(client, october):
     assert body == [
         {"period": "2026-09-01", "category": "dining", "total_cents": 5000},
         {"period": "2026-10-01", "category": "groceries", "total_cents": 6618},
-        {"period": "2026-10-01", "category": "dining", "total_cents": 2000},
+        {"period": "2026-10-01", "category": "dining", "total_cents": -260},
     ]
 
 
@@ -92,7 +93,7 @@ def test_spending_over_time_by_year(client, october):
 
     assert body == [
         {"period": "2025-01-01", "category": "shopping", "total_cents": 1000},
-        {"period": "2026-01-01", "category": "dining", "total_cents": 2000 + 5000 + 9999},
+        {"period": "2026-01-01", "category": "dining", "total_cents": 2000 + 5000 + 9999 - 2260},
         {"period": "2026-01-01", "category": "groceries", "total_cents": 6618},
     ]
 

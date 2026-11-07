@@ -7,9 +7,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { query, useApi, type CategoryTotal } from "@/lib/api";
 import { categoryColor, categoryLabel } from "@/lib/categories";
 import { addMonths, formatCurrency, formatMonth } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 /** The month's spending per category, largest first, as labelled bars. Doubles as the
- * chart's table view: every category is listed by name with its exact amount. */
+ * chart's table view: every category is listed by name with its exact amount. A category
+ * where refunds outweighed spending shows its (negative) amount in green with no bar. */
 export function CategoryBreakdown({
   month,
   refreshKey = 0,
@@ -23,7 +25,7 @@ export function CategoryBreakdown({
     `/summary/categories${query({ start, end })}`,
     refreshKey,
   );
-  const largest = data?.[0]?.total_cents ?? 0;
+  const largest = Math.max(0, data?.[0]?.total_cents ?? 0);
 
   return (
     <Card>
@@ -58,13 +60,15 @@ export function CategoryBreakdown({
                       />
                       {categoryLabel(category)}
                     </span>
-                    <span className="tabular">{formatCurrency(total_cents)}</span>
+                    <span className={cn("tabular", total_cents < 0 && "text-positive")}>
+                      {formatCurrency(total_cents)}
+                    </span>
                   </div>
                   <div className="h-1.5 rounded-full bg-muted">
                     <div
                       className="h-full rounded-full"
                       style={{
-                        width: `${Math.max(2, (total_cents / largest) * 100)}%`,
+                        width: total_cents > 0 ? `${Math.max(2, (total_cents / largest) * 100)}%` : 0,
                         background: categoryColor(category),
                       }}
                     />

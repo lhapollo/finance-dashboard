@@ -39,6 +39,7 @@ const CATEGORY_ITEMS = Object.fromEntries(ALL_CATEGORIES.map((c) => [c, category
 
 /**
  * Transactions, newest first, with the category and the transfer flag editable in place.
+ * A payback (money in linked to a purchase) shows the purchase's category instead.
  * An edit is saved straight away and locks that field against the rules. `onEdited` lets
  * the page refresh totals that the edit changed.
  */
@@ -163,6 +164,23 @@ export function TransactionsTable({
               <TableCell>
                 {t.is_transfer ? (
                   <span className="text-xs text-muted-foreground">Not counted</span>
+                ) : t.reimburses_id !== null ? (
+                  // A payback counts as its purchase's category; change it on the purchase.
+                  <button
+                    type="button"
+                    onClick={() => setOpenId(t.reimburses_id)}
+                    className="flex items-center gap-2 px-2.5 text-sm hover:underline"
+                    title="Pays back a purchase, so it counts in that purchase's category. Click to open the purchase."
+                  >
+                    <span
+                      className="size-2 shrink-0 rounded-[2px]"
+                      style={{ background: categoryColor(t.counted_category) }}
+                    />
+                    {categoryLabel(t.counted_category)}
+                    <Badge variant="secondary" className="h-4 px-1 text-[10px]">
+                      pays back
+                    </Badge>
+                  </button>
                 ) : (
                   <Select
                     items={{ ...CATEGORY_ITEMS, [t.category]: categoryLabel(t.category) }}
@@ -198,12 +216,20 @@ export function TransactionsTable({
                 className={cn("text-right tabular", t.amount_cents > 0 && "text-positive")}
               >
                 {formatCurrency(t.amount_cents)}
+                {t.reimbursed_cents > 0 && (
+                  <span className="block text-xs text-positive">
+                    {formatCurrency(t.reimbursed_cents)} back
+                  </span>
+                )}
               </TableCell>
               <TableCell className="text-center">
                 <Switch
                   size="sm"
                   checked={t.is_transfer}
-                  disabled={saving === t.id}
+                  // A linked payback or paid-back purchase can't be a transfer; unlink it first.
+                  disabled={
+                    saving === t.id || t.reimburses_id !== null || t.reimbursement_ids.length > 0
+                  }
                   onCheckedChange={(is_transfer) => save(t, { is_transfer })}
                   aria-label={`${t.description} is a transfer between my accounts`}
                 />

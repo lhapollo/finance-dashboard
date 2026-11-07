@@ -23,6 +23,11 @@ export type Transaction = {
   is_transfer: boolean;
   transfer_source: "auto" | "manual";
   transfer_pair_id: number | null;
+  // Paybacks: money in linked to a purchase counts in the purchase's category and month.
+  reimburses_id: number | null; // on a payback: the purchase it pays back
+  counted_category: string; // the purchase's category on a payback, otherwise `category`
+  reimbursement_ids: number[]; // on a purchase: its paybacks, oldest first
+  reimbursed_cents: number; // on a purchase: how much has been paid back (positive)
   imported_at: string;
 };
 

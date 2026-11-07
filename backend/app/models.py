@@ -41,6 +41,11 @@ class Transaction(Base):
     transfer_pair_id: Mapped[int | None] = mapped_column(ForeignKey("transactions.id"))
     # auto = detection may change is_transfer; manual = I set it by hand, detection leaves it.
     transfer_source: Mapped[str] = mapped_column(String(10), default="auto", server_default="auto")
+    # Set on money in that pays back (part of) a purchase, e.g. a friend's e-transfer for their
+    # half of dinner. It then counts against the purchase's category, in the purchase's month.
+    reimburses_id: Mapped[int | None] = mapped_column(
+        ForeignKey("transactions.id", ondelete="SET NULL"), index=True
+    )
     fingerprint: Mapped[str] = mapped_column(String(64), unique=True)
     source: Mapped[str] = mapped_column(String(10))  # csv / plaid
     imported_at: Mapped[datetime] = mapped_column(
@@ -48,6 +53,26 @@ class Transaction(Base):
     )
 
     account: Mapped[Account] = relationship(back_populates="transactions")
+    reimburses: Mapped["Transaction | None"] = relationship(
+        foreign_keys=[reimburses_id], remote_side=[id], back_populates="reimbursements"
+    )
+    reimbursements: Mapped[list["Transaction"]] = relationship(
+        foreign_keys=[reimburses_id], back_populates="reimburses", order_by="Transaction.date"
+    )
+
+    @property
+    def counted_category(self) -> str:
+        """The category this row counts toward: a payback counts as its purchase's category."""
+        return self.reimburses.category if self.reimburses is not None else self.category
+
+    @property
+    def reimbursement_ids(self) -> list[int]:
+        return [r.id for r in self.reimbursements]
+
+    @property
+    def reimbursed_cents(self) -> int:
+        """How much of this purchase has been paid back (positive)."""
+        return sum(r.amount_cents for r in self.reimbursements)
 
 
 class RenameRule(Base):

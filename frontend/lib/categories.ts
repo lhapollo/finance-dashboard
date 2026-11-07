@@ -59,6 +59,9 @@ export type ChartRow = { period: string } & Record<string, number | string>;
  * Turns the API's one-row-per-(period, category) list into one row per period with a
  * column per series, which is the shape a stacked bar chart needs. Every period in
  * `periods` gets a row, even one with no spending, so the time axis has no gaps.
+ *
+ * A series whose refunds outweigh its spending (below zero) is drawn as 0, since a stacked
+ * bar can't show less than nothing. The breakdown list still shows the real number.
  */
 export function toChartRows(
   totals: { period: string; category: string; total_cents: number }[],
@@ -73,6 +76,9 @@ export function toChartRows(
   for (const t of totals) {
     const row = rows.get(t.period);
     if (row) row[seriesFor(t.category)] = (row[seriesFor(t.category)] as number) + t.total_cents;
+  }
+  for (const row of rows.values()) {
+    for (const series of SERIES) row[series] = Math.max(0, row[series] as number);
   }
   return [...rows.values()];
 }

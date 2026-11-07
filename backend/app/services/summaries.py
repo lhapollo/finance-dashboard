@@ -2,25 +2,44 @@
 
 Transfers between my own accounts are left out of everything here: they aren't spending
 or income. Spending is reported as a positive number of cents.
+
+Only the income categories count as income. Money in under any other category lowers that
+category's spending instead: a $60 shirt returned for $60 is $0 of shopping, not $60 of
+shopping plus $60 of income. A payback linked to a purchase (reimburses_id) counts in the
+purchase's category and month, so a dinner I paid $80 for and got $40 back for is $40 of
+dining in the month of the dinner. A category can end up below zero in a month where
+refunds outweigh purchases.
 """
 
 from datetime import date
 from typing import Literal
 
 from sqlalchemy import Date, case, cast, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.models import Transaction
 from app.schemas import CategoryTotal, MonthSummary, PeriodCategoryTotal
 
+INCOME_CATEGORIES = ("income", "rewards")
+
 _amount = Transaction.amount_cents
-_spent = func.coalesce(func.sum(case((_amount < 0, -_amount), else_=0)), 0)
-_income = func.coalesce(func.sum(case((_amount > 0, _amount), else_=0)), 0)
+_purchase = aliased(Transaction)  # the purchase a payback pays back, if any
+_category = func.coalesce(_purchase.category, Transaction.category)
+_date = func.coalesce(_purchase.date, Transaction.date)
+_is_income = _category.in_(INCOME_CATEGORIES)
+_spent = func.coalesce(func.sum(case((_is_income, 0), else_=-_amount)), 0)
+_income = func.coalesce(func.sum(case((_is_income, _amount), else_=0)), 0)
 
 
-def _in_range(start: date, end: date):
-    """start is included, end is not: [2026-10-01, 2026-11-01) is all of October."""
-    return (Transaction.date >= start, Transaction.date < end, Transaction.is_transfer.is_(False))
+def _counted(*columns, start: date, end: date):
+    """SELECT columns over the rows that count between start (included) and end (not):
+    [2026-10-01, 2026-11-01) is all of October. Paybacks are dated by their purchase."""
+    return (
+        select(*columns)
+        .select_from(Transaction)
+        .outerjoin(_purchase, Transaction.reimburses_id == _purchase.id)
+        .where(_date >= start, _date < end, Transaction.is_transfer.is_(False))
+    )
 
 
 def month_start(d: date) -> date:
@@ -34,7 +53,7 @@ def add_months(d: date, months: int) -> date:
 
 
 def spent_and_income(session: Session, start: date, end: date) -> tuple[int, int]:
-    spent, income = session.execute(select(_spent, _income).where(*_in_range(start, end))).one()
+    spent, income = session.execute(_counted(_spent, _income, start=start, end=end)).one()
     return int(spent), int(income)
 
 
@@ -53,13 +72,15 @@ def month_summary(session: Session, month: date) -> MonthSummary:
 
 
 def spending_by_category(session: Session, start: date, end: date) -> list[CategoryTotal]:
-    """Largest first."""
+    """Largest first. Income categories aren't spending, so they're left out."""
+    category = _category.label("category")
     total = (-func.sum(_amount)).label("total")
     rows = session.execute(
-        select(Transaction.category, total)
-        .where(*_in_range(start, end), _amount < 0)
-        .group_by(Transaction.category)
-        .order_by(total.desc(), Transaction.category)
+        _counted(category, total, start=start, end=end)
+        .where(~_is_income)
+        .group_by(category)
+        .having(func.sum(_amount) != 0)  # a fully refunded purchase leaves nothing to show
+        .order_by(total.desc(), category)
     )
     return [CategoryTotal(category=c, total_cents=t) for c, t in rows]
 
@@ -67,13 +88,15 @@ def spending_by_category(session: Session, start: date, end: date) -> list[Categ
 def spending_over_time(
     session: Session, start: date, end: date, unit: Literal["month", "year"]
 ) -> list[PeriodCategoryTotal]:
-    """One row per (period, category) that had spending, oldest period first."""
-    period = cast(func.date_trunc(unit, Transaction.date), Date).label("period")
+    """One row per (period, category) with spending or refunds, oldest period first."""
+    period = cast(func.date_trunc(unit, _date), Date).label("period")
+    category = _category.label("category")
     total = (-func.sum(_amount)).label("total")
     rows = session.execute(
-        select(period, Transaction.category, total)
-        .where(*_in_range(start, end), _amount < 0)
-        .group_by(period, Transaction.category)
-        .order_by(period, total.desc(), Transaction.category)
+        _counted(period, category, total, start=start, end=end)
+        .where(~_is_income)
+        .group_by(period, category)
+        .having(func.sum(_amount) != 0)
+        .order_by(period, total.desc(), category)
     )
     return [PeriodCategoryTotal(period=p, category=c, total_cents=t) for p, c, t in rows]

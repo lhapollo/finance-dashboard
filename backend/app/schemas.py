@@ -58,6 +58,11 @@ class TransactionOut(BaseModel):
     is_transfer: bool
     transfer_source: str
     transfer_pair_id: int | None
+    # Paybacks: money in that pays back a purchase counts in the purchase's category.
+    reimburses_id: int | None  # on a payback: the purchase it pays back
+    counted_category: str  # the purchase's category on a payback, otherwise `category`
+    reimbursement_ids: list[int]  # on a purchase: the paybacks linked to it, oldest first
+    reimbursed_cents: int  # on a purchase: how much has been paid back (positive)
     imported_at: datetime
 
 
@@ -72,12 +77,15 @@ class TransactionUpdate(BaseModel):
     description: a new name for this transaction. Send null to undo a rename. With
     rename_all, every transaction from the same merchant gets the name, now and in future
     imports, instead of just this one.
+
+    reimburses_id: on money in, the purchase it pays back. Send null to unlink.
     """
 
     category: str | None = Field(default=None, min_length=1, max_length=50)
     is_transfer: bool | None = None
     description: str | None = Field(default=None, max_length=500)
     rename_all: bool = False
+    reimburses_id: int | None = None
 
     @field_validator("description")
     @classmethod

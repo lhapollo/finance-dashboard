@@ -35,10 +35,17 @@ def detect_transfers(session: Session) -> int:
     """Mark transfers across all transactions; returns how many rows it newly marked.
 
     Safe to run as often as you like: it only ever adds transfer marks, and it never
-    touches a row whose transfer flag you set by hand (transfer_source = "manual").
+    touches a row whose transfer flag you set by hand (transfer_source = "manual"), or a
+    payback or purchase you linked together (a transfer can't be either).
     """
     rows = session.scalars(
-        select(Transaction).where(Transaction.transfer_source == "auto").order_by(Transaction.id)
+        select(Transaction)
+        .where(
+            Transaction.transfer_source == "auto",
+            Transaction.reimburses_id.is_(None),
+            ~Transaction.reimbursements.any(),
+        )
+        .order_by(Transaction.id)
     ).all()
     before = sum(t.is_transfer for t in rows)
 
