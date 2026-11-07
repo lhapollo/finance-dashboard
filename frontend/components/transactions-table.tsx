@@ -27,6 +27,8 @@ import { cn } from "@/lib/utils";
 export type TransactionFilters = {
   account_id?: number;
   category?: string;
+  money?: "in" | "out";
+  is_transfer?: boolean; // false hides transfers
   start?: string;
   end?: string;
   search?: string;

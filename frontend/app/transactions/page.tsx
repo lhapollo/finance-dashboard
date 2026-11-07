@@ -11,10 +11,20 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { query } from "@/lib/api";
-import { categoryLabel } from "@/lib/categories";
+import { ALL_CATEGORIES, categoryColor, categoryLabel } from "@/lib/categories";
 import { addDays, datePresets, type DateRange } from "@/lib/format";
 import { cn } from "@/lib/utils";
+
+// The Select needs a value for "no filter"; it never reaches the URL or the API.
+const ALL = "all";
+const CATEGORY_ITEMS = {
+  [ALL]: "All categories",
+  ...Object.fromEntries(ALL_CATEGORIES.map((c) => [c, categoryLabel(c)])),
+};
+const MONEY_ITEMS = { [ALL]: "Money in and out", out: "Money out", in: "Money in" };
 
 export default function TransactionsPage() {
   return (
@@ -35,8 +45,11 @@ function FilteredTransactions() {
   const router = useRouter();
   const pathname = usePathname();
 
+  const money = params.get("money");
   const filters: TransactionFilters = {
     category: params.get("category") ?? undefined,
+    money: money === "in" || money === "out" ? money : undefined,
+    is_transfer: params.get("is_transfer") === "false" ? false : undefined,
     start: params.get("start") ?? undefined,
     end: params.get("end") ?? undefined,
     search: params.get("search") ?? undefined,
@@ -55,7 +68,13 @@ function FilteredTransactions() {
     (p) => p.range.start === filters.start && p.range.end === filters.end,
   )?.label;
 
-  const anyFilter = filters.category || filters.start || filters.end || filters.search;
+  const anyFilter =
+    filters.category ||
+    filters.money ||
+    filters.is_transfer === false ||
+    filters.start ||
+    filters.end ||
+    filters.search;
 
   return (
     <Card>
@@ -77,11 +96,66 @@ function FilteredTransactions() {
           <Button type="submit" variant="outline" size="sm">
             Search
           </Button>
-          {filters.category && (
-            <span className="rounded-md bg-muted px-2 py-1 text-xs">
-              Category: {categoryLabel(filters.category)}
-            </span>
-          )}
+          <Select
+            // A category from an old link that isn't in the list still gets a label.
+            items={
+              filters.category
+                ? { ...CATEGORY_ITEMS, [filters.category]: categoryLabel(filters.category) }
+                : CATEGORY_ITEMS
+            }
+            value={filters.category ?? ALL}
+            onValueChange={(value) =>
+              setFilters({ ...filters, category: !value || value === ALL ? undefined : value })
+            }
+          >
+            <SelectTrigger size="sm" className="w-44" aria-label="Category">
+              {filters.category && (
+                <span
+                  className="size-2 shrink-0 rounded-[2px]"
+                  style={{ background: categoryColor(filters.category) }}
+                />
+              )}
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(CATEGORY_ITEMS).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            items={MONEY_ITEMS}
+            value={filters.money ?? ALL}
+            onValueChange={(value) =>
+              setFilters({
+                ...filters,
+                money: value === "in" || value === "out" ? value : undefined,
+              })
+            }
+          >
+            <SelectTrigger size="sm" className="w-40" aria-label="Money in or out">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(MONEY_ITEMS).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Switch
+              size="sm"
+              checked={filters.is_transfer === false}
+              onCheckedChange={(hide) =>
+                setFilters({ ...filters, is_transfer: hide ? false : undefined })
+              }
+            />
+            Hide transfers
+          </label>
           {anyFilter && (
             <Button
               type="button"
