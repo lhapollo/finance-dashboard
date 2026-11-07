@@ -8,14 +8,6 @@ from app.services.transfers import detect_transfers
 
 
 @pytest.fixture
-def savings(db_session):
-    account = Account(name="Tangerine Savings", institution="Tangerine", type="savings")
-    db_session.add(account)
-    db_session.flush()
-    return account
-
-
-@pytest.fixture
 def investing(db_session):
     account = Account(name="Wealthsimple", institution="Wealthsimple", type="investment")
     db_session.add(account)

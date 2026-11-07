@@ -93,6 +93,12 @@ def card(db_session):
     return db_session.scalar(select(Account).where(Account.name == "CIBC Credit Card"))
 
 
+@pytest.fixture
+def savings(db_session):
+    """The Tangerine Savings account that migration 9 seeds."""
+    return db_session.scalar(select(Account).where(Account.name == "Tangerine Savings"))
+
+
 _ids = itertools.count()
 
 

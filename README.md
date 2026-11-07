@@ -34,7 +34,7 @@ cd frontend && npm install && npx vitest run
 
 ## Importing a CSV
 
-With `docker compose up` running, open <http://localhost:8000/docs>, choose `POST /import`, pick the account and the file. Re-importing an overlapping download is safe: rows already saved are skipped. Supported so far: CIBC credit card.
+With `docker compose up` running, open <http://localhost:8000/docs>, choose `POST /import`, pick the account and the file. Re-importing an overlapping download is safe: rows already saved are skipped. Supported so far: CIBC credit card, Tangerine chequing, Tangerine savings, and Tangerine Mastercard.
 
 ## Privacy
 

@@ -1,0 +1,9 @@
+Date,Transaction,Name,Memo,Amount
+10/01/2026,OTHER,Promotional Bonus Interest,Promotional Bonus Interest,7.11
+10/02/2026,CREDIT,Internet Deposit from Tangerine,Internet Deposit from Tangerine Chequing Account - 1234567891,1000.00
+10/06/2026,OTHER,INTERAC e-Transfer From: SAM EXA,INTERAC e-Transfer From: SAM EXAMPLE,40.00
+10/09/2026,DEBIT,Internet Withdrawal to Tangerine,Internet Withdrawal to Tangerine Chequing Account - 1234567891,-250.00
+10/18/2026,CREDIT,Cheque-In Deposit,Cheque-In Deposit,317.94
+10/28/2026,OTHER,Credit Card Rewards Redemption,Credit Card Rewards Redemption,8.58
+10/31/2026,OTHER,Interest Paid,Interest Paid,1.79
+11/30/2026,OTHER,Interest Paid,Interest Paid,0.00

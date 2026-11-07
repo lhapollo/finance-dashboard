@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
+import { DateInput } from "@/components/date-input";
 import {
   TransactionsTable,
   type SortOrder,
@@ -175,25 +176,20 @@ function FilteredTransactions() {
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-1.5 text-muted-foreground">
               From
-              <Input
-                type="date"
+              <DateInput
                 value={filters.start ?? ""}
                 max={toInclusive || undefined}
-                onChange={(e) => setRange({ start: e.target.value || undefined, end: filters.end })}
+                onCommit={(start) => setRange({ start: start || undefined, end: filters.end })}
                 className="h-8 w-40"
               />
             </label>
             <label className="flex items-center gap-1.5 text-muted-foreground">
               To
-              <Input
-                type="date"
+              <DateInput
                 value={toInclusive}
                 min={filters.start}
-                onChange={(e) =>
-                  setRange({
-                    start: filters.start,
-                    end: e.target.value ? addDays(e.target.value, 1) : undefined,
-                  })
+                onCommit={(to) =>
+                  setRange({ start: filters.start, end: to ? addDays(to, 1) : undefined })
                 }
                 className="h-8 w-40"
               />

@@ -206,10 +206,9 @@ def test_money_filter(client, dinner, payback, money, expected):
     assert [t["id"] for t in body["items"]] == [{"payback": payback, "dinner": dinner}[expected].id]
 
 
-def test_transfer_detection_leaves_linked_paybacks_alone(db_session, client, chequing, add, card):
-    savings = Account(name="Tangerine Savings", institution="Tangerine", type="savings")
-    db_session.add(savings)
-    db_session.flush()
+def test_transfer_detection_leaves_linked_paybacks_alone(
+    db_session, client, chequing, savings, add, card
+):
     purchase = add(card, 1, -8000, "DINNER", category="dining")
     add(chequing, 3, -4000, "SOMETHING ELSE")  # same amount, close date: looks like a transfer
     friend = add(savings, 4, 4000, "E-TRANSFER", category="e-transfers")

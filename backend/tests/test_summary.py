@@ -105,6 +105,7 @@ def test_list_accounts(client):
         ("CIBC Credit Card", "CIBC", "credit"),
         ("Tangerine Chequing", "Tangerine", "chequing"),
         ("Tangerine Mastercard", "Tangerine", "credit"),
+        ("Tangerine Savings", "Tangerine", "savings"),
     ]
 
 

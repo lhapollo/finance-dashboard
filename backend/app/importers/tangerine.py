@@ -1,6 +1,6 @@
-"""Tangerine CSVs -> StandardTransaction: chequing and the Mastercard.
+"""Tangerine CSVs -> StandardTransaction: chequing, savings and the Mastercard.
 
-Both exports (checked against real downloads, Oct/Nov 2026) share a shape:
+All three exports (checked against real downloads, Oct/Nov 2026) share a shape:
 - A header row, then Transaction type, Name, Memo and Amount columns.
 - Dates are MM/DD/YYYY (month first: rows like 10/15/2023 rule out day first).
 - Amount is already signed our way: negative = money out.
@@ -9,6 +9,10 @@ Where they differ:
 - Chequing: the header starts "Date". Name is Memo cut off at 32 characters, so Memo is the
   description we keep. Some rows are notes with a 0.00 amount ("Posted :26 Nov 2023", a zero
   "Interest Paid"); they aren't transactions, so they're skipped. Rows are oldest first.
+- Savings: exactly the chequing layout, header included, so the header can't tell them apart.
+  Instead, a transfer row names the *other* account ("Internet Withdrawal to Tangerine
+  Chequing Account"), and no account transfers to itself: a chequing file that mentions
+  "Tangerine Chequing Account" is really a savings file, and the other way round.
 - Mastercard: the header starts "Transaction date". Name is the merchant and place, cut off at
   32 characters ("SANSOTEI RAMEN ADELAID TORONTO O"); Memo is rewards info ("Rewards earned:
   0.52 ~ Category: Restaurant"), so Name is the description we keep. Newest first, and each
@@ -31,9 +35,22 @@ CARD_HEADER = ["Transaction date", "Transaction", "Name", "Memo", "Amount"]
 
 def parse_tangerine(lines: Iterable[str]) -> list[StandardTransaction]:
     """Tangerine chequing. Raises ImportFormatError on the first bad row."""
+    return _parse_bank_account(lines, "Chequing")
+
+
+def parse_tangerine_savings(lines: Iterable[str]) -> list[StandardTransaction]:
+    """Tangerine savings. Raises ImportFormatError on the first bad row."""
+    return _parse_bank_account(lines, "Savings")
+
+
+def _parse_bank_account(lines: Iterable[str], account: str) -> list[StandardTransaction]:
     # Memo kept exactly as written: its double spaces separate merchant and province.
     return _parse(
-        lines, CHEQUING_HEADER, lambda name, memo: (memo or name).strip(), clean_tangerine
+        lines,
+        CHEQUING_HEADER,
+        lambda name, memo: (memo or name).strip(),
+        clean_tangerine,
+        this_account=account,
     )
 
 
@@ -47,6 +64,7 @@ def _parse(
     header: list[str],
     pick_raw: Callable[[str, str], str],
     clean: Callable[[str], str],
+    this_account: str | None = None,
 ) -> list[StandardTransaction]:
     transactions = []
     for line_no, row in enumerate(csv.reader(lines), start=1):
@@ -72,6 +90,13 @@ def _parse(
             continue  # a note, not a transaction
 
         raw_description = pick_raw(name, memo)
+        if this_account and _transfers_with_itself(raw_description, this_account):
+            other = "Savings" if this_account == "Chequing" else "Chequing"
+            raise ImportFormatError(
+                line_no,
+                f"this row moves money to or from Tangerine {this_account} itself, so the file "
+                f"looks like a {other.lower()} export; upload it to Tangerine {other}",
+            )
         try:
             transactions.append(
                 StandardTransaction(
@@ -84,6 +109,11 @@ def _parse(
         except ValidationError as e:
             raise ImportFormatError(line_no, e.errors()[0]["msg"]) from None
     return transactions
+
+
+def _transfers_with_itself(raw: str, account: str) -> bool:
+    m = _OWN_TANGERINE.match(raw)
+    return m is not None and m["account"].lower() == account.lower()
 
 
 def signed_cents(text: str) -> int:

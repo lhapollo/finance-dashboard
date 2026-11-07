@@ -223,6 +223,7 @@ fees:
 
 rewards:
   - CASHBACK
+  - CREDIT CARD REWARDS REDEMPTION  # Tangerine card rewards paid into savings
 
 taxes:
   - "PAY TO: CRA"
@@ -235,6 +236,7 @@ e-transfers:
 
 income:
   - INTEREST PAID
+  - PROMOTIONAL BONUS INTEREST  # Tangerine savings promo rate, paid the 1st of the month
   - BONUS PAYOUT
   - RIPPLING  # payroll provider
   - EFT DEPOSIT FROM CANADA  # government payments, e.g. tax refunds

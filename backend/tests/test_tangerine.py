@@ -10,6 +10,7 @@ from app.importers.tangerine import (
     clean_tangerine_card,
     parse_tangerine,
     parse_tangerine_card,
+    parse_tangerine_savings,
 )
 from app.models import Account, Transaction
 
@@ -209,3 +210,46 @@ def test_card_payment_pairs_with_chequing(client, db_session, chequing, masterca
         select(Transaction).where(Transaction.cleaned_description == "Heytea")
     ).all()
     assert len(heytea) == 2 and heytea[0].category == "dining"
+
+
+# --- Savings -------------------------------------------------------------------------------
+
+SAVINGS_SAMPLE = FIXTURES / "tangerine_savings_sample.csv"
+
+
+def test_savings_rows():
+    with SAVINGS_SAMPLE.open(newline="") as f:
+        rows = parse_tangerine_savings(f)
+
+    assert len(rows) == 7  # the 0.00 interest note is skipped
+    assert (rows[1].date, rows[1].amount_cents) == (date(2026, 10, 2), 100000)
+    assert rows[1].description == "Transfer from Tangerine Chequing"
+    assert rows[3].amount_cents == -25000
+
+
+def test_chequing_and_savings_files_are_told_apart():
+    """Same header, but a file never transfers to its own account, so a mix-up fails loudly."""
+    with pytest.raises(ImportFormatError, match="looks like a chequing export") as e:
+        parse_tangerine_savings(SAMPLE.read_text().splitlines())
+    assert e.value.line == 3  # the withdrawal to Tangerine Savings
+    with pytest.raises(ImportFormatError, match="looks like a savings export") as e:
+        parse_tangerine(SAVINGS_SAMPLE.read_text().splitlines())
+    assert e.value.line == 3  # the deposit from Tangerine Chequing
+
+
+def test_savings_pairs_with_chequing_and_categorizes(client, db_session, chequing, savings):
+    """Chequing sends 1000.00 to savings on Oct 2: both sides are one transfer, not income."""
+    upload(client, chequing, SAMPLE)
+    response = upload(client, savings, SAVINGS_SAMPLE)
+
+    assert response.json() == {"inserted": 7, "skipped": 0}
+    by_raw = {t.raw_description: t for t in db_session.scalars(select(Transaction))}
+    deposit = by_raw["Internet Deposit from Tangerine Chequing Account - 1234567891"]
+    withdrawal = by_raw["Internet Withdrawal to Tangerine Savings Account - 1234567890"]
+    assert deposit.transfer_pair_id == withdrawal.id
+    assert withdrawal.transfer_pair_id == deposit.id
+    assert by_raw["Internet Withdrawal to Tangerine Chequing Account - 1234567891"].is_transfer
+    assert by_raw["Promotional Bonus Interest"].category == "income"
+    assert by_raw["Interest Paid"].category == "income"
+    assert by_raw["Credit Card Rewards Redemption"].category == "rewards"
+    assert not by_raw["INTERAC e-Transfer From: SAM EXAMPLE"].is_transfer

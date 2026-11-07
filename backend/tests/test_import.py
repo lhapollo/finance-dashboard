@@ -77,7 +77,7 @@ def test_unknown_account(client):
 
 
 def test_account_without_converter(client, db_session):
-    account = Account(name="Tangerine Savings", institution="Tangerine", type="savings")
+    account = Account(name="Wealthsimple", institution="Wealthsimple", type="investment")
     db_session.add(account)
     db_session.flush()
 
