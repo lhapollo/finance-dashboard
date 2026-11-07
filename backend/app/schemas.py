@@ -178,6 +178,21 @@ class ReimbursementSummary(BaseModel):
     count: int  # how many reimbursable purchases aren't fully paid back yet
 
 
+class AccountActivity(BaseModel):
+    """One account's month as its bank shows it: every transaction, transfers included, so
+    the numbers can be checked against the bank statement."""
+
+    id: int
+    name: str
+    institution: str
+    type: str
+    money_in_cents: int  # this month, positive
+    money_out_cents: int  # this month, positive
+    count: int  # transactions this month
+    first_date: date | None  # the oldest transaction imported, any month
+    last_date: date | None  # the newest transaction imported, any month
+
+
 class ImportResult(BaseModel):
     inserted: int
     skipped: int

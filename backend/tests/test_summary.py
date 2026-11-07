@@ -155,3 +155,24 @@ def test_list_transactions_oldest_first(client, october):
 
 def test_list_transactions_rejects_unknown_order(client):
     assert client.get("/transactions", params={"order": "sideways"}).status_code == 422
+
+
+def test_account_activity_counts_everything_like_the_bank(client, card, chequing, add):
+    """Transfers and refunds count here: these numbers are for checking bank statements."""
+    add(card, 3, -4618, "LOBLAWS", category="groceries")
+    add(card, 9, 2260, "REFUND", category="dining")
+    add(card, 17, 81240, "PAYMENT THANK YOU", is_transfer=True)
+    add(card, date(2026, 9, 30), -1000, "LAST MONTH")
+    add(chequing, 17, -81240, "EFT WITHDRAWAL TO CIBC CPD", is_transfer=True)
+
+    body = client.get("/summary/accounts", params={"month": "2026-10"}).json()
+
+    by_name = {a["name"]: a for a in body}
+    cibc = by_name["CIBC Credit Card"]
+    assert cibc["money_in_cents"] == 2260 + 81240  # the refund and the payment
+    assert cibc["money_out_cents"] == 4618  # September's purchase isn't in October
+    assert cibc["count"] == 3
+    assert (cibc["first_date"], cibc["last_date"]) == ("2026-09-30", "2026-10-17")
+    assert by_name["Tangerine Chequing"]["money_out_cents"] == 81240
+    savings = by_name["Tangerine Savings"]  # nothing imported: still listed
+    assert (savings["count"], savings["first_date"], savings["last_date"]) == (0, None, None)

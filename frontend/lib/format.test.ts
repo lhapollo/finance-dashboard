@@ -6,6 +6,7 @@ import {
   datePresets,
   toIsoDate,
   currentMonth,
+  daysSince,
   formatCompactCurrency,
   formatCurrency,
   formatDay,
@@ -89,5 +90,19 @@ describe("date ranges", () => {
     expect(presets["Last 3 months"]).toEqual({ start: "2025-11-01", end: "2026-02-01" });
     expect(presets["This year"]).toEqual({ start: "2026-01-01", end: "2027-01-01" });
     expect(presets["All time"]).toEqual({});
+  });
+});
+
+describe("daysSince", () => {
+  const today = new Date(2026, 10, 7, 15, 30); // Nov 7, mid-afternoon
+
+  it("counts whole days, ignoring the time of day", () => {
+    expect(daysSince("2026-11-07", today)).toBe(0);
+    expect(daysSince("2026-11-06", today)).toBe(1);
+    expect(daysSince("2026-10-28", today)).toBe(10);
+  });
+
+  it("works across a daylight saving change", () => {
+    expect(daysSince("2026-10-31", today)).toBe(7); // clocks went back Nov 1
   });
 });

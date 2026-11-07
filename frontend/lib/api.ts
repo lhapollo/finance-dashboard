@@ -64,6 +64,15 @@ export type CategoryTotal = { category: string; total_cents: number };
 
 export type PeriodCategoryTotal = { period: string; category: string; total_cents: number };
 
+/** One account's month as the bank shows it (transfers included), for checking statements. */
+export type AccountActivity = Account & {
+  money_in_cents: number; // this month, positive
+  money_out_cents: number; // this month, positive
+  count: number; // transactions this month
+  first_date: string | null; // oldest transaction imported, any month
+  last_date: string | null; // newest transaction imported, any month
+};
+
 export type ImportResult = { inserted: number; skipped: number };
 
 export class ApiError extends Error {}

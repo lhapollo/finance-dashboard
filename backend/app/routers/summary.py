@@ -5,8 +5,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.schemas import CategoryTotal, MonthSummary, PeriodCategoryTotal, ReimbursementSummary
+from app.schemas import (
+    AccountActivity,
+    CategoryTotal,
+    MonthSummary,
+    PeriodCategoryTotal,
+    ReimbursementSummary,
+)
 from app.services.summaries import (
+    account_activity,
     add_months,
     month_start,
     month_summary,
@@ -72,3 +79,11 @@ def get_spending_over_time(
 def get_reimbursements(session: SessionDep) -> ReimbursementSummary:
     """Money I'm still owed for reimbursable purchases, over all time."""
     return waiting_to_be_reimbursed(session)
+
+
+@router.get("/accounts")
+def get_account_activity(session: SessionDep, month: MonthParam = None) -> list[AccountActivity]:
+    """Each account's money in and out for one month (default: this month), counting every
+    transaction as the bank shows it, for checking against bank statements. Also the date
+    range of everything imported for it, so you can tell when it needs a newer CSV."""
+    return account_activity(session, _parse_month(month))

@@ -66,6 +66,9 @@ function Details({
 }) {
   const { data: t, error, reload } = useApi<Transaction>(`/transactions/${id}`);
   const { data: accounts } = useApi<Account[]>("/accounts");
+  // While the split editor is open, the whole-transaction payback and reimbursable rows
+  // are hidden: the parts decide those.
+  const [splitting, setSplitting] = useState(false);
 
   if (error) return <p className="p-4 text-sm text-destructive">{error}</p>;
   if (!t) {
@@ -148,12 +151,12 @@ function Details({
               </span>
             )}
           </Row>
-          {!t.is_transfer && t.amount_cents > 0 && t.splits.length === 0 && (
+          {!t.is_transfer && t.amount_cents > 0 && t.splits.length === 0 && !splitting && (
             <Row label="Pays back">
               <PaysBack t={t} accounts={accounts} onSelect={onSelect} onSaved={saved} />
             </Row>
           )}
-          {!t.is_transfer && t.amount_cents < 0 && t.splits.length === 0 && (
+          {!t.is_transfer && t.amount_cents < 0 && t.splits.length === 0 && !splitting && (
             <Row label="Reimbursable">
               <ReimbursableToggle t={t} onSaved={saved} />
             </Row>
@@ -207,7 +210,14 @@ function Details({
         </dl>
 
         {canSplit(t) && (
-          <SplitSection t={t} accounts={accounts} onSelect={onSelect} onSaved={saved} />
+          <SplitSection
+            t={t}
+            accounts={accounts}
+            editing={splitting}
+            setEditing={setSplitting}
+            onSelect={onSelect}
+            onSaved={saved}
+          />
         )}
       </div>
     </>
@@ -515,15 +525,18 @@ type DraftPart = { amount: string; category: string; reimburses_id: number | nul
 function SplitSection({
   t,
   accounts,
+  editing,
+  setEditing,
   onSelect,
   onSaved,
 }: {
   t: Transaction;
   accounts: Account[] | null;
+  editing: boolean;
+  setEditing: (editing: boolean) => void;
   onSelect: (id: number) => void;
   onSaved: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

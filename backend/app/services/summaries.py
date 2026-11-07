@@ -19,14 +19,20 @@ reads "entries", which are whole transactions that aren't split plus the parts o
 that are.
 """
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Literal
 
 from sqlalchemy import Date, case, cast, exists, func, literal, select, union_all
 from sqlalchemy.orm import Session, aliased
 
-from app.models import Transaction, TransactionSplit
-from app.schemas import CategoryTotal, MonthSummary, PeriodCategoryTotal, ReimbursementSummary
+from app.models import Account, Transaction, TransactionSplit
+from app.schemas import (
+    AccountActivity,
+    CategoryTotal,
+    MonthSummary,
+    PeriodCategoryTotal,
+    ReimbursementSummary,
+)
 
 INCOME_CATEGORIES = ("income", "rewards")
 
@@ -158,3 +164,39 @@ def waiting_to_be_reimbursed(session: Session) -> ReimbursementSummary:
         select(func.coalesce(func.sum(waiting.c.owed), 0), func.count()).where(waiting.c.owed > 0)
     ).one()
     return ReimbursementSummary(waiting_cents=int(total), count=count)
+
+
+def account_activity(session: Session, month: date) -> list[AccountActivity]:
+    """Each account's money in and out for one month, as the bank shows it. Unlike every
+    other number here, this counts transfers, refunds and splits as plain transactions: it's
+    for checking against bank statements, not for budgeting."""
+    start, end = month_start(month), add_months(month_start(month), 1)
+    in_month = Transaction.date.between(start, end - timedelta(days=1))
+    amount = Transaction.amount_cents
+    rows = session.execute(
+        select(
+            Account,
+            func.coalesce(func.sum(case((in_month & (amount > 0), amount))), 0),
+            func.coalesce(func.sum(case((in_month & (amount < 0), -amount))), 0),
+            func.count(case((in_month, 1))),
+            func.min(Transaction.date),
+            func.max(Transaction.date),
+        )
+        .outerjoin(Transaction, Transaction.account_id == Account.id)
+        .group_by(Account.id)
+        .order_by(Account.id)
+    )
+    return [
+        AccountActivity(
+            id=a.id,
+            name=a.name,
+            institution=a.institution,
+            type=a.type,
+            money_in_cents=int(money_in),
+            money_out_cents=int(money_out),
+            count=count,
+            first_date=first,
+            last_date=last,
+        )
+        for a, money_in, money_out, count, first, last in rows
+    ]

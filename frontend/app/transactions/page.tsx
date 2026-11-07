@@ -14,7 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { query } from "@/lib/api";
+import { query, useApi, type Account } from "@/lib/api";
 import { ALL_CATEGORIES, categoryColor, categoryLabel } from "@/lib/categories";
 import { addDays, datePresets, type DateRange } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,7 @@ const CATEGORY_ITEMS = {
   ...Object.fromEntries(ALL_CATEGORIES.map((c) => [c, categoryLabel(c)])),
 };
 const MONEY_ITEMS = { [ALL]: "Money in and out", out: "Money out", in: "Money in" };
+const ALL_ACCOUNTS = { [ALL]: "All accounts" };
 
 export default function TransactionsPage() {
   return (
@@ -47,7 +48,9 @@ function FilteredTransactions() {
   const pathname = usePathname();
 
   const money = params.get("money");
+  const accountId = Number(params.get("account_id"));
   const filters: TransactionFilters = {
+    account_id: Number.isInteger(accountId) && accountId > 0 ? accountId : undefined,
     category: params.get("category") ?? undefined,
     money: money === "in" || money === "out" ? money : undefined,
     is_transfer: params.get("is_transfer") === "false" ? false : undefined,
@@ -58,6 +61,13 @@ function FilteredTransactions() {
     order: params.get("order") === "asc" ? "asc" : undefined, // newest first is the default
   };
   const [search, setSearch] = useState(filters.search ?? "");
+  const { data: accounts } = useApi<Account[]>("/accounts");
+  const accountItems = {
+    ...ALL_ACCOUNTS,
+    // "…" until the names load, rather than flashing the account's id.
+    ...(filters.account_id ? { [filters.account_id]: "…" } : {}),
+    ...Object.fromEntries((accounts ?? []).map((a) => [String(a.id), a.name])),
+  };
 
   const setFilters = (next: TransactionFilters) =>
     router.replace(`${pathname}${query(next)}`, { scroll: false });
@@ -71,6 +81,7 @@ function FilteredTransactions() {
   )?.label;
 
   const anyFilter =
+    filters.account_id ||
     filters.category ||
     filters.money ||
     filters.is_transfer === false ||
@@ -122,6 +133,27 @@ function FilteredTransactions() {
             </SelectTrigger>
             <SelectContent>
               {Object.entries(CATEGORY_ITEMS).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            items={accountItems}
+            value={filters.account_id ? String(filters.account_id) : ALL}
+            onValueChange={(value) =>
+              setFilters({
+                ...filters,
+                account_id: !value || value === ALL ? undefined : Number(value),
+              })
+            }
+          >
+            <SelectTrigger size="sm" className="w-48" aria-label="Account">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(accountItems).map(([value, label]) => (
                 <SelectItem key={value} value={value}>
                   {label}
                 </SelectItem>

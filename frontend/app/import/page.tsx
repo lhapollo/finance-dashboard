@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,14 +9,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { api, useApi, type Account, type ImportResult } from "@/lib/api";
 
 export default function ImportPage() {
+  // Reading ?account_id= (from a link on the Accounts page) needs a Suspense boundary.
+  return (
+    <Suspense>
+      <ImportForm />
+    </Suspense>
+  );
+}
+
+function ImportForm() {
   const { data: accounts, error: accountsError } = useApi<Account[]>("/accounts");
-  const [accountId, setAccountId] = useState<string | null>(null);
+  const [accountId, setAccountId] = useState<string | null>(useSearchParams().get("account_id"));
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Default to the first account once they've loaded.
+  // Default to the first account once they've loaded (or the one a link asked for).
   const selected = accountId ?? (accounts?.[0] ? String(accounts[0].id) : null);
 
   async function submit(e: React.FormEvent) {
@@ -53,7 +63,11 @@ export default function ImportPage() {
             <label className="flex flex-col gap-1.5 text-sm">
               Account
               <Select
-                items={Object.fromEntries((accounts ?? []).map((a) => [String(a.id), a.name]))}
+                // "…" until the names load, rather than flashing the account's id.
+                items={{
+                  ...(selected ? { [selected]: "…" } : {}),
+                  ...Object.fromEntries((accounts ?? []).map((a) => [String(a.id), a.name])),
+                }}
                 value={selected}
                 onValueChange={(v) => setAccountId(v)}
               >

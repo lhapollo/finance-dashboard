@@ -17,10 +17,10 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboardIcon },
   { href: "/transactions", label: "Transactions", icon: ArrowLeftRightIcon },
+  { href: "/accounts", label: "Accounts", icon: LandmarkIcon },
   { href: "/import", label: "Import", icon: UploadIcon },
   // Later phases; shown so the layout matches the plan.
   { href: null, label: "Buckets", icon: PiggyBankIcon },
-  { href: null, label: "Accounts", icon: LandmarkIcon },
   { href: null, label: "Ask", icon: MessageCircleIcon },
 ];
 

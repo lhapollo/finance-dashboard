@@ -53,6 +53,13 @@ export function formatDay(isoDate: string, today = new Date()): string {
   });
 }
 
+/** Whole days from a "YYYY-MM-DD" date until today: yesterday is 1. */
+export function daysSince(isoDate: string, today = new Date()): number {
+  const start = parseDate(isoDate);
+  const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.round((end.getTime() - start.getTime()) / 86_400_000);
+}
+
 // Months are passed around as "YYYY-MM", the format the API's ?month= takes.
 
 export function currentMonth(today = new Date()): string {
