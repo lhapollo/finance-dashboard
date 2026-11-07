@@ -133,6 +133,7 @@ transport:
   - MTO
 
 shopping:
+  - SHEIN
   - AMAZON
   - AMZN
   - ALIEXPRESS
@@ -218,6 +219,7 @@ home:
 
 fees:
   - ANNUAL FEE
+  - STMT FEE  # CIBC's paper statement fee
   - ANNUAL FEE REBATE  # a refund of the fee, so it cancels out within "fees"
   - PURCHASE INTEREST
 
