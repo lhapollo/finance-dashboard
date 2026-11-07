@@ -42,6 +42,35 @@ class AccountOut(BaseModel):
     type: str
 
 
+def _tidy_category(v: str) -> str:
+    # "Dining " and "dining" should be one category, not two.
+    v = " ".join(v.split()).lower()
+    if not v:
+        raise ValueError("category is blank")
+    return v
+
+
+class SplitOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    amount_cents: int  # same sign as the transaction
+    category: str
+    reimburses_id: int | None  # on money in: the purchase this part pays back
+    counted_category: str  # the purchase's category if it pays one back, else `category`
+
+
+class SplitIn(BaseModel):
+    amount_cents: int = Field(strict=True)
+    category: str = Field(min_length=1, max_length=50)
+    reimburses_id: int | None = None
+
+    @field_validator("category")
+    @classmethod
+    def normalize_category(cls, v: str) -> str:
+        return _tidy_category(v)
+
+
 class TransactionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -66,6 +95,9 @@ class TransactionOut(BaseModel):
     # Someone will pay all of it back, so it isn't counted as my spending.
     reimbursable: bool
     reimbursement_status: Literal["waiting", "received"] | None  # None unless reimbursable
+    # The parts this transaction is split into; empty if it isn't split. When there are
+    # parts, they count instead of the whole transaction.
+    splits: list[SplitOut]
     imported_at: datetime
 
 
@@ -106,12 +138,7 @@ class TransactionUpdate(BaseModel):
     @field_validator("category")
     @classmethod
     def normalize_category(cls, v: str | None) -> str | None:
-        # "Dining " and "dining" should be one category, not two.
-        if v is not None:
-            v = " ".join(v.split()).lower()
-            if not v:
-                raise ValueError("category is blank")
-        return v
+        return None if v is None else _tidy_category(v)
 
 
 class RecategorizeResult(BaseModel):

@@ -40,8 +40,8 @@ def detect_transfers(session: Session) -> int:
 
     Safe to run as often as you like: it only ever adds transfer marks, and it never
     touches a row whose transfer flag you set by hand (transfer_source = "manual"), or a
-    payback or purchase you linked together, or a reimbursable purchase (a transfer can't be
-    any of those).
+    payback or purchase you linked together, a reimbursable purchase, or a split transaction
+    (a transfer can't be any of those).
     """
     rows = session.scalars(
         select(Transaction)
@@ -50,6 +50,8 @@ def detect_transfers(session: Session) -> int:
             Transaction.reimburses_id.is_(None),
             ~Transaction.reimbursements.any(),
             Transaction.reimbursable.is_(False),
+            ~Transaction.splits.any(),
+            ~Transaction.split_paybacks.any(),
         )
         .order_by(Transaction.id)
     ).all()

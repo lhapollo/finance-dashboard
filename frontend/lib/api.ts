@@ -31,7 +31,17 @@ export type Transaction = {
   // Someone will pay all of it back (a work expense), so it isn't counted as spending.
   reimbursable: boolean;
   reimbursement_status: "waiting" | "received" | null; // null unless reimbursable
+  splits: Split[]; // empty unless split; when split, the parts count instead of the whole
   imported_at: string;
+};
+
+/** One part of a split transaction. Parts add up to the transaction's amount. */
+export type Split = {
+  id: number;
+  amount_cents: number; // same sign as the transaction
+  category: string;
+  reimburses_id: number | null; // on money in: the purchase this part pays back
+  counted_category: string; // the purchase's category if it pays one back
 };
 
 export type TransactionPage = { items: Transaction[]; total: number };

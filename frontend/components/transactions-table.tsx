@@ -167,6 +167,27 @@ export function TransactionsTable({
               <TableCell>
                 {t.is_transfer ? (
                   <span className="text-xs text-muted-foreground">Not counted</span>
+                ) : t.splits.length > 0 ? (
+                  // Each part has its own category; edit them in the details panel.
+                  <button
+                    type="button"
+                    onClick={() => setOpenId(t.id)}
+                    className="flex items-center gap-2 px-2.5 text-sm hover:underline"
+                    title={t.splits
+                      .map((s) => `${formatCurrency(s.amount_cents)} ${categoryLabel(s.counted_category)}`)
+                      .join("\n")}
+                  >
+                    <span className="flex gap-0.5">
+                      {t.splits.map((s) => (
+                        <span
+                          key={s.id}
+                          className="size-2 shrink-0 rounded-[2px]"
+                          style={{ background: categoryColor(s.counted_category) }}
+                        />
+                      ))}
+                    </span>
+                    Split · {t.splits.length} parts
+                  </button>
                 ) : t.reimburses_id !== null ? (
                   // A payback counts as its purchase's category; change it on the purchase.
                   <button
@@ -247,7 +268,8 @@ export function TransactionsTable({
                     saving === t.id ||
                     t.reimburses_id !== null ||
                     t.reimbursement_ids.length > 0 ||
-                    t.reimbursable
+                    t.reimbursable ||
+                    t.splits.length > 0
                   }
                   onCheckedChange={(is_transfer) => save(t, { is_transfer })}
                   aria-label={`${t.description} is a transfer between my accounts`}

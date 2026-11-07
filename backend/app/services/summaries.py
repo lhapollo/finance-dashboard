@@ -12,42 +12,68 @@ refunds outweigh purchases.
 
 A reimbursable purchase (someone will pay all of it back, e.g. a work dinner) isn't my
 spending, so it's left out, and so are the paybacks linked to it: they aren't income.
+
+A split transaction counts as its parts instead of as a whole: a $1,345 paycheck split into
+$1,300 of income and a $45 payback for a work dinner is $1,300 of income. Everything here
+reads "entries", which are whole transactions that aren't split plus the parts of those
+that are.
 """
 
 from datetime import date
 from typing import Literal
 
-from sqlalchemy import Date, case, cast, func, select
+from sqlalchemy import Date, case, cast, exists, func, literal, select, union_all
 from sqlalchemy.orm import Session, aliased
 
-from app.models import Transaction
+from app.models import Transaction, TransactionSplit
 from app.schemas import CategoryTotal, MonthSummary, PeriodCategoryTotal, ReimbursementSummary
 
 INCOME_CATEGORIES = ("income", "rewards")
 
-_amount = Transaction.amount_cents
-_purchase = aliased(Transaction)  # the purchase a payback pays back, if any
-_payback = aliased(Transaction)  # a payback linked to a purchase
-_category = func.coalesce(_purchase.category, Transaction.category)
-_date = func.coalesce(_purchase.date, Transaction.date)
+_is_split = exists().where(TransactionSplit.transaction_id == Transaction.id)
+_entries = union_all(
+    select(
+        Transaction.date,
+        Transaction.amount_cents,
+        Transaction.category,
+        Transaction.reimburses_id,
+        Transaction.is_transfer,
+        Transaction.reimbursable,
+    ).where(~_is_split),
+    # A part takes its date and transfer flag from its transaction. A split transaction
+    # can't be reimbursable, so neither can its parts.
+    select(
+        Transaction.date,
+        TransactionSplit.amount_cents,
+        TransactionSplit.category,
+        TransactionSplit.reimburses_id,
+        Transaction.is_transfer,
+        literal(False),
+    ).join(Transaction, TransactionSplit.transaction_id == Transaction.id),
+).subquery("entries")
+
+_amount = _entries.c.amount_cents
+_purchase = aliased(Transaction)  # the purchase an entry pays back, if any
+_category = func.coalesce(_purchase.category, _entries.c.category)
+_date = func.coalesce(_purchase.date, _entries.c.date)
 _is_income = _category.in_(INCOME_CATEGORIES)
-# On a payback, whether its purchase is reimbursable; otherwise the row's own flag.
-_reimbursable = func.coalesce(_purchase.reimbursable, Transaction.reimbursable)
+# On a payback, whether its purchase is reimbursable; otherwise the entry's own flag.
+_reimbursable = func.coalesce(_purchase.reimbursable, _entries.c.reimbursable)
 _spent = func.coalesce(func.sum(case((_is_income, 0), else_=-_amount)), 0)
 _income = func.coalesce(func.sum(case((_is_income, _amount), else_=0)), 0)
 
 
 def _counted(*columns, start: date, end: date):
-    """SELECT columns over the rows that count between start (included) and end (not):
+    """SELECT columns over the entries that count between start (included) and end (not):
     [2026-10-01, 2026-11-01) is all of October. Paybacks are dated by their purchase."""
     return (
         select(*columns)
-        .select_from(Transaction)
-        .outerjoin(_purchase, Transaction.reimburses_id == _purchase.id)
+        .select_from(_entries)
+        .outerjoin(_purchase, _entries.c.reimburses_id == _purchase.id)
         .where(
             _date >= start,
             _date < end,
-            Transaction.is_transfer.is_(False),
+            _entries.c.is_transfer.is_(False),
             _reimbursable.is_(False),
         )
     )
@@ -117,8 +143,8 @@ def waiting_to_be_reimbursed(session: Session) -> ReimbursementSummary:
     """Money I'm owed: reimbursable purchases minus the paybacks linked to them so far, over
     all time (it's still owed whenever the purchase was)."""
     paid_back = (
-        select(func.sum(_payback.amount_cents))
-        .where(_payback.reimburses_id == Transaction.id)
+        select(func.sum(_entries.c.amount_cents))
+        .where(_entries.c.reimburses_id == Transaction.id)
         .correlate(Transaction)
         .scalar_subquery()
     )
