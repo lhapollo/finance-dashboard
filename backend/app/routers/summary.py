@@ -5,13 +5,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.schemas import CategoryTotal, MonthSummary, PeriodCategoryTotal
+from app.schemas import CategoryTotal, MonthSummary, PeriodCategoryTotal, ReimbursementSummary
 from app.services.summaries import (
     add_months,
     month_start,
     month_summary,
     spending_by_category,
     spending_over_time,
+    waiting_to_be_reimbursed,
 )
 
 router = APIRouter(prefix="/summary", tags=["summary"])
@@ -65,3 +66,9 @@ def get_spending_over_time(
     else:
         start, end = date(1900, 1, 1), date(last.year + 1, 1, 1)
     return spending_over_time(session, start, end, group_by)
+
+
+@router.get("/reimbursements")
+def get_reimbursements(session: SessionDep) -> ReimbursementSummary:
+    """Money I'm still owed for reimbursable purchases, over all time."""
+    return waiting_to_be_reimbursed(session)

@@ -29,6 +29,7 @@ export type TransactionFilters = {
   category?: string;
   money?: "in" | "out";
   is_transfer?: boolean; // false hides transfers
+  reimbursable?: boolean; // true shows only purchases someone will pay back
   start?: string;
   end?: string;
   search?: string;
@@ -218,19 +219,35 @@ export function TransactionsTable({
                 className={cn("text-right tabular", t.amount_cents > 0 && "text-positive")}
               >
                 {formatCurrency(t.amount_cents)}
-                {t.reimbursed_cents > 0 && (
-                  <span className="block text-xs text-positive">
-                    {formatCurrency(t.reimbursed_cents)} back
+                {t.reimbursement_status === "waiting" ? (
+                  <span className="block text-xs text-muted-foreground" title="Not counted as spending">
+                    {t.reimbursed_cents > 0
+                      ? `${formatCurrency(-t.amount_cents - t.reimbursed_cents)} still owed`
+                      : "owed to you"}
                   </span>
+                ) : t.reimbursement_status === "received" ? (
+                  <span className="block text-xs text-positive" title="Not counted as spending">
+                    paid back
+                  </span>
+                ) : (
+                  t.reimbursed_cents > 0 && (
+                    <span className="block text-xs text-positive">
+                      {formatCurrency(t.reimbursed_cents)} back
+                    </span>
+                  )
                 )}
               </TableCell>
               <TableCell className="text-center">
                 <Switch
                   size="sm"
                   checked={t.is_transfer}
-                  // A linked payback or paid-back purchase can't be a transfer; unlink it first.
+                  // A linked payback, paid-back purchase or reimbursable purchase can't be a
+                  // transfer; unlink or unmark it first.
                   disabled={
-                    saving === t.id || t.reimburses_id !== null || t.reimbursement_ids.length > 0
+                    saving === t.id ||
+                    t.reimburses_id !== null ||
+                    t.reimbursement_ids.length > 0 ||
+                    t.reimbursable
                   }
                   onCheckedChange={(is_transfer) => save(t, { is_transfer })}
                   aria-label={`${t.description} is a transfer between my accounts`}

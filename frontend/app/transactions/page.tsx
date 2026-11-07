@@ -51,6 +51,7 @@ function FilteredTransactions() {
     category: params.get("category") ?? undefined,
     money: money === "in" || money === "out" ? money : undefined,
     is_transfer: params.get("is_transfer") === "false" ? false : undefined,
+    reimbursable: params.get("reimbursable") === "true" ? true : undefined,
     start: params.get("start") ?? undefined,
     end: params.get("end") ?? undefined,
     search: params.get("search") ?? undefined,
@@ -73,6 +74,7 @@ function FilteredTransactions() {
     filters.category ||
     filters.money ||
     filters.is_transfer === false ||
+    filters.reimbursable ||
     filters.start ||
     filters.end ||
     filters.search;
@@ -157,6 +159,17 @@ function FilteredTransactions() {
             />
             Hide transfers
           </label>
+          {filters.reimbursable && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setFilters({ ...filters, reimbursable: undefined })}
+              aria-label="Stop showing only reimbursable purchases"
+            >
+              Reimbursable only ×
+            </Button>
+          )}
           {anyFilter && (
             <Button
               type="button"

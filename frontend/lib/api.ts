@@ -28,6 +28,9 @@ export type Transaction = {
   counted_category: string; // the purchase's category on a payback, otherwise `category`
   reimbursement_ids: number[]; // on a purchase: its paybacks, oldest first
   reimbursed_cents: number; // on a purchase: how much has been paid back (positive)
+  // Someone will pay all of it back (a work expense), so it isn't counted as spending.
+  reimbursable: boolean;
+  reimbursement_status: "waiting" | "received" | null; // null unless reimbursable
   imported_at: string;
 };
 
@@ -40,6 +43,11 @@ export type MonthSummary = {
   net_cents: number;
   previous_spent_cents: number;
   change_pct: number | null;
+};
+
+export type ReimbursementSummary = {
+  waiting_cents: number; // still owed to me, all time (positive)
+  count: number; // reimbursable purchases not fully paid back yet
 };
 
 export type CategoryTotal = { category: string; total_cents: number };

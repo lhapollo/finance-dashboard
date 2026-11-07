@@ -9,7 +9,7 @@ import { SpendingChart } from "@/components/spending-chart";
 import { StatCard } from "@/components/stat-card";
 import { TransactionsTable } from "@/components/transactions-table";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { query, useApi, type MonthSummary } from "@/lib/api";
+import { query, useApi, type MonthSummary, type ReimbursementSummary } from "@/lib/api";
 import { addMonths, currentMonth, formatCurrency, formatMonth, formatWholeDollars } from "@/lib/format";
 
 export default function DashboardPage() {
@@ -32,6 +32,7 @@ function Dashboard() {
     `/summary/month${query({ month })}`,
     refreshKey,
   );
+  const { data: owed } = useApi<ReimbursementSummary>("/summary/reimbursements", refreshKey);
   const previous = formatMonth(`${addMonths(month, -1)}-01`, true);
 
   return (
@@ -83,6 +84,17 @@ function Dashboard() {
           detail="Income minus spending"
         />
       </div>
+
+      {owed && owed.count > 0 && (
+        <p className="text-sm text-muted-foreground">
+          Waiting to be paid back:{" "}
+          <span className="font-medium text-foreground">{formatCurrency(owed.waiting_cents)}</span>{" "}
+          for {owed.count} {owed.count === 1 ? "purchase" : "purchases"} (not counted as spending).{" "}
+          <Link href="/transactions?reimbursable=true" className="underline">
+            See {owed.count === 1 ? "it" : "them"}
+          </Link>
+        </p>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">

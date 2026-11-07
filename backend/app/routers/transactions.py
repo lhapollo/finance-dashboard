@@ -28,6 +28,7 @@ def list_transactions(
     end: date | None = None,
     search: Annotated[str | None, Query(max_length=100)] = None,
     money: Literal["in", "out"] | None = None,
+    reimbursable: bool | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
     order: Literal["desc", "asc"] = "desc",
@@ -55,6 +56,8 @@ def list_transactions(
         filters.append(Transaction.amount_cents < 0)
     if is_transfer is not None:
         filters.append(Transaction.is_transfer.is_(is_transfer))
+    if reimbursable is not None:
+        filters.append(Transaction.reimbursable.is_(reimbursable))
     if start is not None:
         filters.append(Transaction.date >= start)
     if end is not None:
@@ -103,8 +106,8 @@ def update_transaction(
     update: TransactionUpdate,
     session: Annotated[Session, Depends(get_session)],
 ) -> TransactionOut:
-    """Fix a name, category or transfer flag by hand, or link a payback to its purchase.
-    Rules and detection won't change it back."""
+    """Fix a name, category or transfer flag by hand, link a payback to its purchase, or mark
+    a purchase as reimbursable. Rules and detection won't change it back."""
     t = session.get(Transaction, transaction_id)
     if t is None:
         raise HTTPException(404, f"no transaction with id {transaction_id}")
@@ -137,11 +140,20 @@ def update_transaction(
             else _payback_target(session, t, update.reimburses_id)
         )
 
+    if update.reimbursable is not None:
+        if update.reimbursable and t.amount_cents > 0:
+            raise HTTPException(400, "only money out can be reimbursable")
+        if update.reimbursable and t.is_transfer:
+            raise HTTPException(400, "a transfer can't be reimbursable")
+        t.reimbursable = update.reimbursable
+
     if update.is_transfer is not None:
         if update.is_transfer and (t.reimburses is not None or t.reimbursements):
             raise HTTPException(
                 400, "a payback or a paid-back purchase can't be a transfer; unlink it first"
             )
+        if update.is_transfer and t.reimbursable:
+            raise HTTPException(400, "a reimbursable purchase can't be a transfer")
         t.is_transfer = update.is_transfer
         t.transfer_source = "manual"
         if not update.is_transfer and t.transfer_pair_id is not None:

@@ -1,6 +1,7 @@
 from datetime import date, datetime
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -46,6 +47,10 @@ class Transaction(Base):
     reimburses_id: Mapped[int | None] = mapped_column(
         ForeignKey("transactions.id", ondelete="SET NULL"), index=True
     )
+    # Set on money out that someone will pay back in full, e.g. a work dinner. It isn't my
+    # spending, so it's left out of every total (and so are paybacks linked to it). Whether
+    # it's been paid back yet is worked out from those paybacks: see reimbursement_status.
+    reimbursable: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa_false())
     fingerprint: Mapped[str] = mapped_column(String(64), unique=True)
     source: Mapped[str] = mapped_column(String(10))  # csv / plaid
     imported_at: Mapped[datetime] = mapped_column(
@@ -73,6 +78,14 @@ class Transaction(Base):
     def reimbursed_cents(self) -> int:
         """How much of this purchase has been paid back (positive)."""
         return sum(r.amount_cents for r in self.reimbursements)
+
+    @property
+    def reimbursement_status(self) -> str | None:
+        """On a reimbursable purchase: "received" once linked paybacks cover it, else
+        "waiting". None on everything else."""
+        if not self.reimbursable:
+            return None
+        return "received" if self.reimbursed_cents >= -self.amount_cents else "waiting"
 
 
 class RenameRule(Base):

@@ -63,6 +63,9 @@ class TransactionOut(BaseModel):
     counted_category: str  # the purchase's category on a payback, otherwise `category`
     reimbursement_ids: list[int]  # on a purchase: the paybacks linked to it, oldest first
     reimbursed_cents: int  # on a purchase: how much has been paid back (positive)
+    # Someone will pay all of it back, so it isn't counted as my spending.
+    reimbursable: bool
+    reimbursement_status: Literal["waiting", "received"] | None  # None unless reimbursable
     imported_at: datetime
 
 
@@ -79,6 +82,9 @@ class TransactionUpdate(BaseModel):
     imports, instead of just this one.
 
     reimburses_id: on money in, the purchase it pays back. Send null to unlink.
+
+    reimbursable: on money out, true if someone will pay all of it back (a work expense),
+    so it isn't counted as spending. Link the payback with reimburses_id when it arrives.
     """
 
     category: str | None = Field(default=None, min_length=1, max_length=50)
@@ -86,6 +92,7 @@ class TransactionUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=500)
     rename_all: bool = False
     reimburses_id: int | None = None
+    reimbursable: bool | None = None
 
     @field_validator("description")
     @classmethod
@@ -137,6 +144,11 @@ class MonthSummary(BaseModel):
     net_cents: int  # income - spent
     previous_spent_cents: int
     change_pct: float | None  # spending vs the month before; None if that month had none
+
+
+class ReimbursementSummary(BaseModel):
+    waiting_cents: int  # still owed to me, across all reimbursable purchases (positive)
+    count: int  # how many reimbursable purchases aren't fully paid back yet
 
 
 class ImportResult(BaseModel):

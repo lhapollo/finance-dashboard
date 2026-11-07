@@ -115,6 +115,10 @@ function Details({
           <Row label="Category">
             {t.is_transfer ? (
               <span className="text-muted-foreground">Not counted (transfer)</span>
+            ) : t.reimbursable ? (
+              <span className="text-muted-foreground">
+                Not counted ({categoryLabel(t.category)}, but someone is paying it back)
+              </span>
             ) : (
               <span className="flex items-center gap-2">
                 <span
@@ -138,12 +142,18 @@ function Details({
               <PaysBack t={t} accounts={accounts} onSelect={onSelect} onSaved={saved} />
             </Row>
           )}
+          {!t.is_transfer && t.amount_cents < 0 && (
+            <Row label="Reimbursable">
+              <ReimbursableToggle t={t} onSaved={saved} />
+            </Row>
+          )}
           {t.reimbursement_ids.length > 0 && (
             <Row label="Paid back">
               {formatCurrency(t.reimbursed_cents)} of {formatCurrency(-t.amount_cents)}
               <span className="text-muted-foreground">
                 {" "}
-                · your share {formatCurrency(-t.amount_cents - t.reimbursed_cents)}
+                · {t.reimbursable ? "still owed" : "your share"}{" "}
+                {formatCurrency(-t.amount_cents - t.reimbursed_cents)}
               </span>
               {t.reimbursement_ids.map((rid) => (
                 <LinkedTransaction
@@ -252,6 +262,36 @@ function usePatch(id: number, onSaved: () => void) {
   }
 
   return { patch, busy, error };
+}
+
+/** On money out: whether someone (work, a friend) will pay all of it back. */
+function ReimbursableToggle({ t, onSaved }: { t: Transaction; onSaved: () => void }) {
+  const { patch, busy, error } = usePatch(t.id, onSaved);
+  const owed = -t.amount_cents - t.reimbursed_cents;
+
+  return (
+    <>
+      <Label className="flex items-start gap-2 font-normal">
+        <Checkbox
+          checked={t.reimbursable}
+          disabled={busy}
+          onCheckedChange={(reimbursable) => patch({ reimbursable })}
+          className="mt-0.5"
+        />
+        <span>Someone will pay all of this back, so it isn’t my spending</span>
+      </Label>
+      {t.reimbursement_status === "waiting" && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          Waiting for {formatCurrency(owed)}. When it arrives, open the payment and link it to
+          this purchase.
+        </p>
+      )}
+      {t.reimbursement_status === "received" && (
+        <p className="mt-1 text-xs text-positive">Paid back in full.</p>
+      )}
+      {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+    </>
+  );
 }
 
 /** On money in: the purchase it pays back, or a way to pick one. */

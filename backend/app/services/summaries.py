@@ -9,6 +9,9 @@ shopping plus $60 of income. A payback linked to a purchase (reimburses_id) coun
 purchase's category and month, so a dinner I paid $80 for and got $40 back for is $40 of
 dining in the month of the dinner. A category can end up below zero in a month where
 refunds outweigh purchases.
+
+A reimbursable purchase (someone will pay all of it back, e.g. a work dinner) isn't my
+spending, so it's left out, and so are the paybacks linked to it: they aren't income.
 """
 
 from datetime import date
@@ -18,15 +21,18 @@ from sqlalchemy import Date, case, cast, func, select
 from sqlalchemy.orm import Session, aliased
 
 from app.models import Transaction
-from app.schemas import CategoryTotal, MonthSummary, PeriodCategoryTotal
+from app.schemas import CategoryTotal, MonthSummary, PeriodCategoryTotal, ReimbursementSummary
 
 INCOME_CATEGORIES = ("income", "rewards")
 
 _amount = Transaction.amount_cents
 _purchase = aliased(Transaction)  # the purchase a payback pays back, if any
+_payback = aliased(Transaction)  # a payback linked to a purchase
 _category = func.coalesce(_purchase.category, Transaction.category)
 _date = func.coalesce(_purchase.date, Transaction.date)
 _is_income = _category.in_(INCOME_CATEGORIES)
+# On a payback, whether its purchase is reimbursable; otherwise the row's own flag.
+_reimbursable = func.coalesce(_purchase.reimbursable, Transaction.reimbursable)
 _spent = func.coalesce(func.sum(case((_is_income, 0), else_=-_amount)), 0)
 _income = func.coalesce(func.sum(case((_is_income, _amount), else_=0)), 0)
 
@@ -38,7 +44,12 @@ def _counted(*columns, start: date, end: date):
         select(*columns)
         .select_from(Transaction)
         .outerjoin(_purchase, Transaction.reimburses_id == _purchase.id)
-        .where(_date >= start, _date < end, Transaction.is_transfer.is_(False))
+        .where(
+            _date >= start,
+            _date < end,
+            Transaction.is_transfer.is_(False),
+            _reimbursable.is_(False),
+        )
     )
 
 
@@ -100,3 +111,24 @@ def spending_over_time(
         .order_by(period, total.desc(), category)
     )
     return [PeriodCategoryTotal(period=p, category=c, total_cents=t) for p, c, t in rows]
+
+
+def waiting_to_be_reimbursed(session: Session) -> ReimbursementSummary:
+    """Money I'm owed: reimbursable purchases minus the paybacks linked to them so far, over
+    all time (it's still owed whenever the purchase was)."""
+    paid_back = (
+        select(func.sum(_payback.amount_cents))
+        .where(_payback.reimburses_id == Transaction.id)
+        .correlate(Transaction)
+        .scalar_subquery()
+    )
+    owed = (-Transaction.amount_cents - func.coalesce(paid_back, 0)).label("owed")
+    waiting = (
+        select(owed)
+        .where(Transaction.reimbursable.is_(True), Transaction.is_transfer.is_(False))
+        .subquery()
+    )
+    total, count = session.execute(
+        select(func.coalesce(func.sum(waiting.c.owed), 0), func.count()).where(waiting.c.owed > 0)
+    ).one()
+    return ReimbursementSummary(waiting_cents=int(total), count=count)

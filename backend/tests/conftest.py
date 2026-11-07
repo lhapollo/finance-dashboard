@@ -94,6 +94,12 @@ def card(db_session):
 
 
 @pytest.fixture
+def chequing(db_session):
+    """The Tangerine Chequing account that migration 6 seeds."""
+    return db_session.scalar(select(Account).where(Account.name == "Tangerine Chequing"))
+
+
+@pytest.fixture
 def savings(db_session):
     """The Tangerine Savings account that migration 9 seeds."""
     return db_session.scalar(select(Account).where(Account.name == "Tangerine Savings"))

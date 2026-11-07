@@ -3,16 +3,8 @@
 from datetime import date
 
 import pytest
-from sqlalchemy import select
 
-from app.models import Account
 from app.services.transfers import detect_transfers
-
-
-@pytest.fixture
-def chequing(db_session):
-    """The Tangerine chequing account that a migration seeds."""
-    return db_session.scalar(select(Account).where(Account.name == "Tangerine Chequing"))
 
 
 @pytest.fixture

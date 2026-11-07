@@ -91,12 +91,6 @@ def test_bad_files_fail_loudly(lines, line, message):
     assert e.value.line == line
 
 
-@pytest.fixture
-def chequing(db_session):
-    """The account that migration 6 seeds."""
-    return db_session.scalar(select(Account).where(Account.name == "Tangerine Chequing"))
-
-
 def upload(client, account, path):
     return client.post(
         "/import", data={"account_id": account.id}, files={"file": (path.name, path.read_bytes())}

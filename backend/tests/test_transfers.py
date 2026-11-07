@@ -104,6 +104,29 @@ def test_card_purchase_never_pairs(db_session, card, savings, add):
     assert not dinner.is_transfer and not repayment.is_transfer
 
 
+def test_debit_purchase_never_pairs(db_session, chequing, savings, add):
+    """A $2.61 McDonald's debit purchase and a friend's $2.61 e-transfer the same day: a
+    payback, not money moving between my accounts (a real mix-up, Nov 2023)."""
+    lunch = add(chequing, 2, -261, "Interac - Purchase - MCDONALD'S #888 TORONTO  ON  CA")
+    repayment = add(savings, 2, 261, "INTERAC e-Transfer From: SAM EXAMPLE")
+
+    detect_transfers(db_session)
+
+    assert not lunch.is_transfer and not repayment.is_transfer
+
+
+@pytest.mark.parametrize(
+    "cents, raw",
+    [(-40000, "EFT Withdrawal to WS Investments"), (40000, "EFT Deposit from WS Investments")],
+)
+def test_money_to_and_from_wealthsimple_is_a_transfer(db_session, chequing, add, cents, raw):
+    """Wealthsimple (the TFSA) isn't imported, so the Tangerine side alone has to tell."""
+    row = add(chequing, 5, cents, raw)
+
+    assert detect_transfers(db_session) == 1
+    assert row.is_transfer
+
+
 def test_closest_date_wins_and_each_row_pairs_once(db_session, savings, investing, add):
     out = add(savings, 5, -50000)
     far = add(investing, 8, 50000)
