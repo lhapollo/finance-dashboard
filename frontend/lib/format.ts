@@ -53,6 +53,19 @@ export function formatDay(isoDate: string, today = new Date()): string {
   });
 }
 
+/** "just now", "5 minutes ago", "3 hours ago", "2 days ago", from a full timestamp. */
+export function timeAgo(timestamp: string, now = new Date()): string {
+  const minutes = Math.floor((now.getTime() - new Date(timestamp).getTime()) / 60_000);
+  if (minutes < 1) return "just now";
+  const [n, unit] =
+    minutes < 60
+      ? [minutes, "minute"]
+      : minutes < 60 * 24
+        ? [Math.floor(minutes / 60), "hour"]
+        : [Math.floor(minutes / (60 * 24)), "day"];
+  return `${n} ${unit}${n === 1 ? "" : "s"} ago`;
+}
+
 /** Whole days from a "YYYY-MM-DD" date until today: yesterday is 1. */
 export function daysSince(isoDate: string, today = new Date()): number {
   const start = parseDate(isoDate);

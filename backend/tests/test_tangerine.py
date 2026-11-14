@@ -53,6 +53,9 @@ def test_raw_description_is_kept_exactly(sample):
         ("Interac - Purchase - RAMONA'S KITCHEN RICHMOND H  ON  CA", "Ramona's Kitchen"),
         ("Interac - Purchase - BOOSTER JUICE # TORONTO  ON  CA", "Booster Juice"),
         ("Visa Debit - Purchase - STUBHUB CANADA LTD TORONTO  CA", "Stubhub Canada Ltd"),
+        # Plaid's wording of the same purchases: commas instead of double spaces.
+        ("Interac - Purchase - BOOSTER JUICE # TORONTO, ON, CA", "Booster Juice"),
+        ("Visa Debit - Purchase - Amazon.ca*A040Z7H73 866-216-1072, CA", "Amazon.ca"),
         ("INTERAC e-Transfer To: sam example", "e-Transfer to Sam Example"),
         ("INTERAC e-Transfer From: SAM EXAMPLE", "e-Transfer from Sam Example"),
         ("Cancelled INTERAC e-Transfer To: Sam Example", "Cancelled e-Transfer to Sam Example"),
@@ -100,7 +103,7 @@ def upload(client, account, path):
 def test_import_marks_own_transfers_and_categorizes(client, db_session, chequing):
     response = upload(client, chequing, SAMPLE)
 
-    assert response.json() == {"inserted": 9, "skipped": 0}
+    assert response.json() == {"inserted": 9, "skipped": 0, "after_cutoff": 0}
     by_raw = {t.raw_description: t for t in db_session.scalars(select(Transaction))}
     to_savings = by_raw["Internet Withdrawal to Tangerine Savings Account - 1234567890"]
     assert to_savings.is_transfer and to_savings.transfer_pair_id is None  # savings not imported
@@ -137,7 +140,11 @@ def test_card_payment_pairs_with_the_card_side(client, db_session, card, chequin
 def test_reimporting_skips_everything(client, chequing):
     upload(client, chequing, SAMPLE)
 
-    assert upload(client, chequing, SAMPLE).json() == {"inserted": 0, "skipped": 9}
+    assert upload(client, chequing, SAMPLE).json() == {
+        "inserted": 0,
+        "skipped": 9,
+        "after_cutoff": 0,
+    }
 
 
 # --- Mastercard ----------------------------------------------------------------------------
@@ -194,7 +201,7 @@ def test_card_payment_pairs_with_chequing(client, db_session, chequing, masterca
 
     response = upload(client, mastercard, CARD_SAMPLE)
 
-    assert response.json() == {"inserted": 6, "skipped": 0}
+    assert response.json() == {"inserted": 6, "skipped": 0, "after_cutoff": 0}
     payment = db_session.scalar(
         select(Transaction).where(Transaction.raw_description == "PAYMENT - THANK YOU")
     )
@@ -236,7 +243,7 @@ def test_savings_pairs_with_chequing_and_categorizes(client, db_session, chequin
     upload(client, chequing, SAMPLE)
     response = upload(client, savings, SAVINGS_SAMPLE)
 
-    assert response.json() == {"inserted": 7, "skipped": 0}
+    assert response.json() == {"inserted": 7, "skipped": 0, "after_cutoff": 0}
     by_raw = {t.raw_description: t for t in db_session.scalars(select(Transaction))}
     deposit = by_raw["Internet Deposit from Tangerine Chequing Account - 1234567891"]
     withdrawal = by_raw["Internet Withdrawal to Tangerine Savings Account - 1234567890"]

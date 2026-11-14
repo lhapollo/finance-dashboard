@@ -14,8 +14,18 @@ class Account(Base):
     name: Mapped[str] = mapped_column(String(100), unique=True)
     institution: Mapped[str] = mapped_column(String(100))
     type: Mapped[str] = mapped_column(String(20))  # credit / chequing / savings / investment
+    # Set when the account's transactions come from Plaid: the bank login, and Plaid's id for
+    # this account within it.
+    plaid_item_id: Mapped[int | None] = mapped_column(
+        ForeignKey("plaid_items.id", ondelete="SET NULL")
+    )
+    plaid_account_id: Mapped[str | None] = mapped_column(String(100), unique=True)
+    # The last day CSV imports cover, set when the account is linked to Plaid. CSV rows after
+    # it are skipped on import: Plaid owns those days, and the two would duplicate each other.
+    csv_cutoff_date: Mapped[date | None] = mapped_column(Date)
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="account")
+    plaid_item: Mapped["PlaidItem | None"] = relationship(back_populates="accounts")
 
 
 class Transaction(Base):
@@ -53,6 +63,11 @@ class Transaction(Base):
     reimbursable: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa_false())
     fingerprint: Mapped[str] = mapped_column(String(64), unique=True)
     source: Mapped[str] = mapped_column(String(10))  # csv / plaid
+    # Plaid's id for this transaction, so later syncs can update or remove it. Also set on a
+    # CSV row that Plaid matched (same account, date and amount), so it isn't added twice.
+    plaid_transaction_id: Mapped[str | None] = mapped_column(String(100), unique=True)
+    # Not final yet (Plaid only): the amount can still change, e.g. when a tip is added.
+    pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa_false())
     imported_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -172,6 +187,6 @@ class PlaidItem(Base):
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # ok, or Plaid's error code from the last sync (e.g. ITEM_LOGIN_REQUIRED).
     status: Mapped[str] = mapped_column(String(50), default="ok", server_default="ok")
-    # True while a sync runs, so two syncs of one login can't run at once.
-    syncing: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa_false())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    accounts: Mapped[list[Account]] = relationship(back_populates="plaid_item")

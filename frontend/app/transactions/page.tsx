@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { query, useApi, type Account } from "@/lib/api";
+import { useAutoSync } from "@/lib/use-auto-sync";
 import { ALL_CATEGORIES, categoryColor, categoryLabel } from "@/lib/categories";
 import { addDays, datePresets, type DateRange } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -62,6 +63,7 @@ function FilteredTransactions() {
   };
   const [search, setSearch] = useState(filters.search ?? "");
   const { data: accounts } = useApi<Account[]>("/accounts");
+  const { syncKey } = useAutoSync();
   const accountItems = {
     ...ALL_ACCOUNTS,
     // "…" until the names load, rather than flashing the account's id.
@@ -259,6 +261,7 @@ function FilteredTransactions() {
 
         <TransactionsTable
           filters={filters}
+          refreshKey={syncKey}
           onOrderChange={(order: SortOrder) =>
             setFilters({ ...filters, order: order === "asc" ? "asc" : undefined })
           }

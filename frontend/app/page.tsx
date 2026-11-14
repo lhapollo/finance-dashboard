@@ -10,6 +10,7 @@ import { StatCard } from "@/components/stat-card";
 import { TransactionsTable } from "@/components/transactions-table";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { query, useApi, type MonthSummary, type ReimbursementSummary } from "@/lib/api";
+import { useAutoSync } from "@/lib/use-auto-sync";
 import { addMonths, currentMonth, formatCurrency, formatMonth, formatWholeDollars } from "@/lib/format";
 
 export default function DashboardPage() {
@@ -25,8 +26,12 @@ export default function DashboardPage() {
 function Dashboard() {
   const [month, setMonth] = useState(currentMonth);
   // Bumped after an edit in the table, so every total on the page reloads.
-  const [refreshKey, setRefreshKey] = useState(0);
-  const refresh = () => setRefreshKey((k) => k + 1);
+  const [edits, setEdits] = useState(0);
+  const refresh = () => setEdits((k) => k + 1);
+  // New transactions from connected banks reload everything too. Both only ever go up, so
+  // their sum changes whenever either does.
+  const { syncKey } = useAutoSync();
+  const refreshKey = edits + syncKey;
 
   const { data: summary, error } = useApi<MonthSummary>(
     `/summary/month${query({ month })}`,
@@ -118,6 +123,7 @@ function Dashboard() {
             pageSize={10}
             paged={false}
             onEdited={refresh}
+            refreshKey={syncKey}
           />
         </CardContent>
       </Card>

@@ -98,6 +98,8 @@ class TransactionOut(BaseModel):
     # The parts this transaction is split into; empty if it isn't split. When there are
     # parts, they count instead of the whole transaction.
     splits: list[SplitOut]
+    source: str  # csv / plaid
+    pending: bool  # Plaid only: not final yet, the amount can still change
     imported_at: datetime
 
 
@@ -191,11 +193,14 @@ class AccountActivity(BaseModel):
     count: int  # transactions this month
     first_date: date | None  # the oldest transaction imported, any month
     last_date: date | None  # the newest transaction imported, any month
+    plaid_linked: bool  # new transactions come from Plaid, not CSVs
 
 
 class ImportResult(BaseModel):
     inserted: int
-    skipped: int
+    skipped: int  # already imported, or after_cutoff
+    # Of the skipped: rows after the account's CSV cutoff, since Plaid covers those days.
+    after_cutoff: int = 0
 
 
 class PlaidStatus(BaseModel):
@@ -228,3 +233,35 @@ class PlaidItemOut(BaseModel):
     status: str
     last_synced_at: datetime | None
     created_at: datetime
+
+
+class PlaidAccountOut(BaseModel):
+    """One account inside a connected bank login, and which of my accounts it's linked to."""
+
+    plaid_account_id: str
+    name: str
+    mask: str | None  # last 4 digits
+    type: str  # Plaid's words: depository / credit / ...
+    subtype: str | None  # checking / savings / credit card / ...
+    account_id: int | None  # my account it's linked to
+    suggested_account_id: int | None  # my account it looks like, when not linked yet
+
+
+class PlaidAccountLink(BaseModel):
+    plaid_account_id: str
+    account_id: int | None  # None = don't import this one
+
+
+class PlaidAccountLinks(BaseModel):
+    links: list[PlaidAccountLink]
+
+
+class SyncResultOut(BaseModel):
+    item_id: int
+    institution_name: str
+    added: int
+    matched: int  # already imported from a CSV, so not added again
+    updated: int
+    removed: int
+    unlinked_accounts: list[str]
+    error: str | None

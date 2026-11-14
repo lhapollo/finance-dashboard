@@ -13,6 +13,7 @@ import {
   formatMonth,
   formatWholeDollars,
   monthStarts,
+  timeAgo,
 } from "./format";
 
 describe("formatCurrency", () => {
@@ -104,5 +105,16 @@ describe("daysSince", () => {
 
   it("works across a daylight saving change", () => {
     expect(daysSince("2026-10-31", today)).toBe(7); // clocks went back Nov 1
+  });
+});
+
+describe("timeAgo", () => {
+  const now = new Date("2026-11-14T12:00:00Z");
+  it("rounds down to the biggest whole unit", () => {
+    expect(timeAgo("2026-11-14T11:59:30Z", now)).toBe("just now");
+    expect(timeAgo("2026-11-14T11:59:00Z", now)).toBe("1 minute ago");
+    expect(timeAgo("2026-11-14T11:15:00Z", now)).toBe("45 minutes ago");
+    expect(timeAgo("2026-11-14T06:00:00Z", now)).toBe("6 hours ago");
+    expect(timeAgo("2026-11-12T11:00:00Z", now)).toBe("2 days ago");
   });
 });

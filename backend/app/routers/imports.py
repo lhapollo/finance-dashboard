@@ -46,6 +46,12 @@ def import_csv(
     if not parsed:
         raise HTTPException(400, "file has no transactions")
 
+    # Once an account is linked to Plaid, Plaid owns the days after the cutoff. A CSV row
+    # there would duplicate the Plaid one, since their wording differs enough to dodge
+    # fingerprints.
+    cutoff = account.csv_cutoff_date if account.plaid_account_id else None
+    after_cutoff = sum(1 for t in parsed if cutoff and t.date > cutoff)
+
     fps = fingerprints(account.id, parsed)
     existing = set(
         session.scalars(select(Transaction.fingerprint).where(Transaction.fingerprint.in_(fps)))
@@ -62,7 +68,7 @@ def import_csv(
             source=t.source,
         )
         for t, fp in zip(parsed, fps, strict=True)
-        if fp not in existing
+        if fp not in existing and not (cutoff and t.date > cutoff)
     ]
     session.add_all(new)
     session.flush()  # gives the new rows their ids, which transfer pairing needs
@@ -73,4 +79,6 @@ def import_csv(
     except ValueError as e:  # a typo in a rules file; nothing is saved
         raise HTTPException(400, str(e)) from None
     session.commit()
-    return ImportResult(inserted=len(new), skipped=len(parsed) - len(new))
+    return ImportResult(
+        inserted=len(new), skipped=len(parsed) - len(new), after_cutoff=after_cutoff
+    )

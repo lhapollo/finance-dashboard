@@ -197,6 +197,7 @@ def account_activity(session: Session, month: date) -> list[AccountActivity]:
             count=count,
             first_date=first,
             last_date=last,
+            plaid_linked=a.plaid_account_id is not None,
         )
         for a, money_in, money_out, count, first, last in rows
     ]

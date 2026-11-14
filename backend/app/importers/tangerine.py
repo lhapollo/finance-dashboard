@@ -127,9 +127,11 @@ def signed_cents(text: str) -> int:
 # --- Description cleanup -------------------------------------------------------------------
 # Purchases: "Interac - Purchase - PHO ANH VU WATE WATERLOO  ON  CA" (two spaces before the
 # province and country). Reshaped to "PHO ANH VU WATE WATERLOO, ON", the card layout that
-# clean_description already knows how to tidy.
+# clean_description already knows how to tidy. Plaid has the same text with commas instead
+# ("WATERLOO, ON, CA"), so either separator works.
 _PURCHASE = re.compile(r"^(?:Interac|Visa Debit) - (?:Purchase|Refund) - (?P<rest>.+)$", re.I)
-_PLACE = re.compile(r"\s{2,}(?:(?P<province>[A-Z]{2})\s{2,})?CA$")
+_SEP = r"(?:\s{2,}|,\s*)"
+_PLACE = re.compile(rf"{_SEP}(?:(?P<province>[A-Z]{{2}}){_SEP})?CA$")
 _E_TRANSFER = re.compile(
     r"^(?P<cancelled>Cancelled )?INTERAC e-Transfer (?P<direction>To|From):\s*(?P<who>.+)$", re.I
 )

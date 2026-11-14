@@ -32,6 +32,8 @@ export type Transaction = {
   reimbursable: boolean;
   reimbursement_status: "waiting" | "received" | null; // null unless reimbursable
   splits: Split[]; // empty unless split; when split, the parts count instead of the whole
+  source: "csv" | "plaid";
+  pending: boolean; // Plaid only: not final yet, the amount can still change
   imported_at: string;
 };
 
@@ -71,9 +73,14 @@ export type AccountActivity = Account & {
   count: number; // transactions this month
   first_date: string | null; // oldest transaction imported, any month
   last_date: string | null; // newest transaction imported, any month
+  plaid_linked: boolean; // new transactions come from Plaid, not CSVs
 };
 
-export type ImportResult = { inserted: number; skipped: number };
+export type ImportResult = {
+  inserted: number;
+  skipped: number; // already imported, or after_cutoff
+  after_cutoff: number; // rows on days Plaid covers for this account
+};
 
 /** Whether Plaid keys are in .env; `problem` says what's missing when they aren't. */
 export type PlaidStatus = {
@@ -90,6 +97,29 @@ export type PlaidItem = {
   status: string; // "ok", or Plaid's error code from the last sync
   last_synced_at: string | null;
   created_at: string;
+};
+
+/** One account inside a connected bank, and which of my accounts it's linked to. */
+export type PlaidAccount = {
+  plaid_account_id: string;
+  name: string;
+  mask: string | null; // last 4 digits
+  type: string;
+  subtype: string | null;
+  account_id: number | null; // linked to this account of mine
+  suggested_account_id: number | null; // looks like this one, when not linked yet
+};
+
+/** What one bank's sync did. */
+export type SyncResult = {
+  item_id: number;
+  institution_name: string;
+  added: number;
+  matched: number; // already imported from a CSV, so not added again
+  updated: number;
+  removed: number;
+  unlinked_accounts: string[];
+  error: string | null;
 };
 
 export class ApiError extends Error {}

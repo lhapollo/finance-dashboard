@@ -52,11 +52,14 @@ export function TransactionsTable({
   paged = true,
   onEdited,
   onOrderChange,
+  refreshKey = 0,
 }: {
   filters?: TransactionFilters;
   pageSize?: number;
   paged?: boolean;
   onEdited?: () => void;
+  /** Bump to reload, e.g. after a bank sync. */
+  refreshKey?: number;
   /** When given, the Date header becomes a button that flips the sort order. */
   onOrderChange?: (order: SortOrder) => void;
 }) {
@@ -72,6 +75,7 @@ export function TransactionsTable({
 
   const { data, error, reload } = useApi<TransactionPage>(
     `/transactions${query({ ...filters, limit: pageSize, offset: page * pageSize })}`,
+    refreshKey,
   );
   const [saving, setSaving] = useState<number | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
@@ -240,6 +244,14 @@ export function TransactionsTable({
                 className={cn("text-right tabular", t.amount_cents > 0 && "text-positive")}
               >
                 {formatCurrency(t.amount_cents)}
+                {t.pending && (
+                  <span
+                    className="block text-xs text-muted-foreground"
+                    title="Your bank hasn't finalized this yet; the amount can still change"
+                  >
+                    pending
+                  </span>
+                )}
                 {t.reimbursement_status === "waiting" ? (
                   <span className="block text-xs text-muted-foreground" title="Not counted as spending">
                     {t.reimbursed_cents > 0

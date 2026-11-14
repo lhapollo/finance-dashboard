@@ -8,6 +8,7 @@ import { MonthPicker } from "@/components/month-picker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { query, useApi, type AccountActivity } from "@/lib/api";
+import { useAutoSync } from "@/lib/use-auto-sync";
 import { addMonths, currentMonth, daysSince, formatCurrency, formatDay, formatMonth } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -32,8 +33,11 @@ export default function AccountsPage() {
 
 function Accounts() {
   const [month, setMonth] = useState(currentMonth);
+  const { syncKey } = useAutoSync();
+  const [changes, setChanges] = useState(0); // bumped after Sync now or linking accounts
   const { data: accounts, error } = useApi<AccountActivity[]>(
     `/summary/accounts${query({ month })}`,
+    syncKey + changes,
   );
 
   return (
@@ -56,13 +60,14 @@ function Accounts() {
           : [0, 1].map((i) => <Skeleton key={i} className="h-48 rounded-xl" />)}
       </div>
 
-      <ConnectedBanks />
+      <ConnectedBanks syncKey={syncKey} onChanged={() => setChanges((c) => c + 1)} />
     </>
   );
 }
 
 function AccountCard({ account: a, month }: { account: AccountActivity; month: string }) {
-  const stale = a.last_date !== null && daysSince(a.last_date) > STALE_DAYS;
+  // Plaid-linked accounts have their own sync status, under Connected banks.
+  const stale = !a.plaid_linked && a.last_date !== null && daysSince(a.last_date) > STALE_DAYS;
   const net = a.money_in_cents - a.money_out_cents;
 
   return (
@@ -71,6 +76,7 @@ function AccountCard({ account: a, month }: { account: AccountActivity; month: s
         <CardTitle>{a.name}</CardTitle>
         <CardDescription>
           {a.institution} · {TYPE_LABELS[a.type] ?? a.type}
+          {a.plaid_linked && " · via Plaid"}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -105,7 +111,8 @@ function AccountCard({ account: a, month }: { account: AccountActivity; month: s
                 </Link>
               </p>
               <p className={cn(stale ? "text-foreground" : "text-muted-foreground")}>
-                Imported from {formatDay(a.first_date)} to {formatDay(a.last_date)}
+                {a.plaid_linked ? "Transactions" : "Imported"} from {formatDay(a.first_date)} to{" "}
+                {formatDay(a.last_date)}
                 {stale && (
                   <>
                     . Nothing newer for {daysSince(a.last_date)} days:{" "}
