@@ -1,8 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import FRONTEND_ORIGINS
-from app.routers import accounts, imports, rename_rules, summary, transactions
+from app.plaid import PlaidError, PlaidNotConfigured
+from app.routers import accounts, imports, plaid, rename_rules, summary, transactions
+from app.services.secrets import TokenKeyError
 
 app = FastAPI(title="Finance Dashboard API")
 
@@ -19,6 +22,21 @@ app.include_router(imports.router)
 app.include_router(transactions.router)
 app.include_router(summary.router)
 app.include_router(rename_rules.router)
+app.include_router(plaid.router)
+
+
+# Plaid problems become clear messages for the page, in the same {"detail": ...} shape as
+# FastAPI's own errors, instead of a bare "500 Internal Server Error".
+@app.exception_handler(PlaidNotConfigured)
+@app.exception_handler(TokenKeyError)
+def setup_problem(request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse({"detail": str(exc)}, status_code=503)
+
+
+@app.exception_handler(PlaidError)
+def plaid_problem(request: Request, exc: PlaidError) -> JSONResponse:
+    # 502 = "a service behind this one failed": the problem is at Plaid, not in this app.
+    return JSONResponse({"detail": f"Plaid: {exc.message} ({exc.code})"}, status_code=502)
 
 
 @app.get("/health")

@@ -36,6 +36,10 @@ cd frontend && npm install && npx vitest run
 
 With `docker compose up` running, open <http://localhost:8000/docs>, choose `POST /import`, pick the account and the file. Re-importing an overlapping download is safe: rows already saved are skipped. Supported so far: CIBC credit card, Tangerine chequing, Tangerine savings, and Tangerine Mastercard.
 
+## Connecting banks with Plaid (in progress)
+
+Optional. Sign up at <https://dashboard.plaid.com/signup> ("Personal use"), then put your client id and secrets in `.env` (see `.env.example`), along with a `PLAID_TOKEN_KEY` for encrypting access tokens. Restart the backend with `docker compose up -d --build backend`, then use **Connect a bank** on the Accounts page. With `PLAID_ENV=sandbox`, Plaid shows test banks: log in with `user_good` / `pass_good`. Syncing transactions from connected banks isn't built yet.
+
 ## Privacy
 
 Real bank CSVs go in `data/`, which is gitignored and never committed. Test fixtures use fake data only.

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useState } from "react";
 
+import { ConnectedBanks } from "@/components/connected-banks";
 import { MonthPicker } from "@/components/month-picker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -54,6 +55,8 @@ function Accounts() {
           ? accounts.map((a) => <AccountCard key={a.id} account={a} month={month} />)
           : [0, 1].map((i) => <Skeleton key={i} className="h-48 rounded-xl" />)}
       </div>
+
+      <ConnectedBanks />
     </>
   );
 }

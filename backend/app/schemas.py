@@ -196,3 +196,35 @@ class AccountActivity(BaseModel):
 class ImportResult(BaseModel):
     inserted: int
     skipped: int
+
+
+class PlaidStatus(BaseModel):
+    """Whether Plaid is set up, so the page can explain what's missing instead of failing."""
+
+    configured: bool
+    environment: str  # sandbox / production
+    problem: str | None  # what's missing, when not configured
+
+
+class LinkToken(BaseModel):
+    link_token: str  # short-lived (about 4 hours); opens Plaid Link once
+
+
+class PlaidConnect(BaseModel):
+    """What Plaid Link hands the browser after you log in to a bank."""
+
+    public_token: str = Field(min_length=1)  # temporary; the backend swaps it for an access token
+    institution_name: str = Field(min_length=1, max_length=100)
+
+
+class PlaidItemOut(BaseModel):
+    """A connected bank login. Deliberately leaves out the access token."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    institution_name: str
+    environment: str
+    status: str
+    last_synced_at: datetime | None
+    created_at: datetime

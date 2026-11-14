@@ -75,6 +75,23 @@ export type AccountActivity = Account & {
 
 export type ImportResult = { inserted: number; skipped: number };
 
+/** Whether Plaid keys are in .env; `problem` says what's missing when they aren't. */
+export type PlaidStatus = {
+  configured: boolean;
+  environment: "sandbox" | "production";
+  problem: string | null;
+};
+
+/** A bank login connected through Plaid. The access token stays on the backend. */
+export type PlaidItem = {
+  id: number;
+  institution_name: string;
+  environment: "sandbox" | "production";
+  status: string; // "ok", or Plaid's error code from the last sync
+  last_synced_at: string | null;
+  created_at: string;
+};
+
 export class ApiError extends Error {}
 
 /** Calls the backend and returns its JSON. Errors carry FastAPI's "detail" message. */

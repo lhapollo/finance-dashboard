@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -150,4 +150,28 @@ class RenameRule(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     match: Mapped[str] = mapped_column(String(500), unique=True)  # a cleaned_description
     name: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PlaidItem(Base):
+    """One bank login connected through Plaid. One login can cover several accounts, e.g. a
+    Tangerine login covers chequing, savings and the Mastercard."""
+
+    __tablename__ = "plaid_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    item_id: Mapped[str] = mapped_column(String(100), unique=True)  # Plaid's id for this login
+    institution_name: Mapped[str] = mapped_column(String(100))
+    # sandbox / production. A sandbox token doesn't work in production, and the other way round.
+    environment: Mapped[str] = mapped_column(String(20))
+    # Encrypted (see app/services/secrets.py). Never sent to the browser.
+    access_token: Mapped[str] = mapped_column(Text)
+    # Plaid's bookmark for /transactions/sync: "everything up to here is already saved".
+    # Empty until the first sync.
+    cursor: Mapped[str | None] = mapped_column(Text)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # ok, or Plaid's error code from the last sync (e.g. ITEM_LOGIN_REQUIRED).
+    status: Mapped[str] = mapped_column(String(50), default="ok", server_default="ok")
+    # True while a sync runs, so two syncs of one login can't run at once.
+    syncing: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa_false())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
