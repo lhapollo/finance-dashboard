@@ -291,3 +291,81 @@ class SyncResultOut(BaseModel):
     removed: int
     unlinked_accounts: list[str]
     error: str | None
+
+
+class BucketIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    type: Literal["recurring", "goal"]
+    target_amount_cents: int | None = Field(default=None, gt=0, strict=True)
+    target_date: date | None = None
+
+    @field_validator("name")
+    @classmethod
+    def tidy_name(cls, v: str) -> str:
+        v = " ".join(v.split())
+        if not v:
+            raise ValueError("name is blank")
+        return v
+
+
+class BucketUpdate(BaseModel):
+    """Leave a field out to keep it as is."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    target_amount_cents: int | None = Field(default=None, gt=0, strict=True)
+    target_date: date | None = None
+    archived: bool | None = None
+
+
+class BucketOut(BaseModel):
+    id: int
+    name: str
+    type: str
+    target_amount_cents: int | None
+    target_date: date | None
+    archived: bool
+    allocated_cents: int  # put in, minus taken out, since the budget started
+    balance_cents: int  # what's in it now
+    progress_pct: int | None  # goals: balance as a % of the target (0-100)
+
+
+class BudgetOut(BaseModel):
+    """The whole budget: every bucket, and the money no bucket has claimed yet."""
+
+    start_date: date | None  # None until the fresh-start setup is done
+    available_cents: int | None  # cash minus card debt, from bank balances (None: unknown)
+    available_as_of: datetime | None
+    assigned_cents: int  # in buckets
+    # available - assigned. None when available is unknown. Negative means more is in
+    # buckets than you actually have.
+    unassigned_cents: int | None
+    buckets: list[BucketOut]  # open ones first, archived last
+
+
+class OpeningBalance(BaseModel):
+    bucket_id: int
+    amount_cents: int = Field(ge=0, strict=True)
+
+
+class BudgetStart(BaseModel):
+    """The fresh start: from this date, split the money I have across buckets."""
+
+    start_date: date
+    opening: list[OpeningBalance]
+
+
+class AssignIn(BaseModel):
+    """Put unassigned money into a bucket (positive) or give some back (negative)."""
+
+    bucket_id: int
+    amount_cents: int = Field(strict=True)
+    note: str | None = Field(default=None, max_length=200)
+
+
+class MoveIn(BaseModel):
+    """Move money from one bucket to another, e.g. to cover overspent groceries."""
+
+    from_bucket_id: int
+    to_bucket_id: int
+    amount_cents: int = Field(gt=0, strict=True)
+    note: str | None = Field(default=None, max_length=200)

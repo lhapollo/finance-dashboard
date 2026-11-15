@@ -197,3 +197,58 @@ class PlaidItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     accounts: Mapped[list[Account]] = relationship(back_populates="plaid_item")
+
+
+class Bucket(Base):
+    """A job for some of my money, e.g. "Rent" or "Switch 2". Buckets are labels, not real
+    accounts: the money stays where it is, and the app keeps track of what it's for."""
+
+    __tablename__ = "buckets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+    # recurring = refilled and spent every paycheck (groceries); goal = saved up for (a Switch 2)
+    type: Mapped[str] = mapped_column(String(20))
+    target_amount_cents: Mapped[int | None] = mapped_column(Integer)  # required for goals
+    target_date: Mapped[date | None] = mapped_column(Date)  # optional, for goals
+    # Done with (a goal reached, a bucket I don't need). Hidden, and holds no money.
+    archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa_false())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    allocations: Mapped[list["Allocation"]] = relationship(
+        back_populates="bucket", cascade="all, delete-orphan"
+    )
+
+
+class Allocation(Base):
+    """Money put into a bucket (positive) or taken out of it (negative). A bucket's balance is
+    the sum of its allocations, minus what's been spent from it.
+
+    Nothing here moves real money; it records a decision I made."""
+
+    __tablename__ = "allocations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    bucket_id: Mapped[int] = mapped_column(ForeignKey("buckets.id", ondelete="CASCADE"), index=True)
+    amount_cents: Mapped[int] = mapped_column(Integer)
+    date: Mapped[date] = mapped_column(Date)
+    # opening_balance = the fresh-start split; assign = to or from unassigned money;
+    # move = one side of moving money between buckets; archive = a bucket's leftover going
+    # back to unassigned when it's archived; paycheck = a paycheck's split (coming later)
+    kind: Mapped[str] = mapped_column(String(20))
+    source_transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("transactions.id", ondelete="SET NULL")
+    )
+    note: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    bucket: Mapped[Bucket] = relationship(back_populates="allocations")
+
+
+class BudgetSettings(Base):
+    """One row: when budgeting started. Spending before this date doesn't touch buckets."""
+
+    __tablename__ = "budget_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    start_date: Mapped[date] = mapped_column(Date)

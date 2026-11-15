@@ -1,0 +1,690 @@
+"use client";
+
+import Link from "next/link";
+import { Suspense, useState } from "react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { api, useApi, type Bucket, type Budget } from "@/lib/api";
+import { checkOpening, goalStatus } from "@/lib/budget";
+import { formatCurrency, formatDay, timeAgo, toIsoDate } from "@/lib/format";
+import { parseDollars } from "@/lib/splits";
+import { useAutoSync } from "@/lib/use-auto-sync";
+import { cn } from "@/lib/utils";
+
+export default function BucketsPage() {
+  // Depends on today's date and live balances, so it renders per visit (see the dashboard).
+  return (
+    <Suspense>
+      <Buckets />
+    </Suspense>
+  );
+}
+
+/** Sends a change and returns the error message, or null when it worked. */
+async function send(path: string, method: string, body?: object): Promise<string | null> {
+  try {
+    await api(path, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return null;
+  } catch (e) {
+    return (e as Error).message;
+  }
+}
+
+function Buckets() {
+  const { syncKey } = useAutoSync();
+  const { data: budget, error, reload } = useApi<Budget>("/budget", syncKey);
+  const [startingOver, setStartingOver] = useState(false);
+
+  return (
+    <>
+      <h1 className="text-xl font-semibold">Buckets</h1>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      {!budget ? (
+        <Skeleton className="h-64 rounded-xl" />
+      ) : budget.start_date === null || startingOver ? (
+        <Setup
+          budget={budget}
+          reload={reload}
+          onDone={() => setStartingOver(false)}
+          onCancel={budget.start_date === null ? undefined : () => setStartingOver(false)}
+        />
+      ) : (
+        <Overview budget={budget} reload={reload} onStartOver={() => setStartingOver(true)} />
+      )}
+    </>
+  );
+}
+
+// --- Setup: the fresh start ---------------------------------------------------------------
+
+function Setup({
+  budget,
+  reload,
+  onDone,
+  onCancel,
+}: {
+  budget: Budget;
+  reload: () => void;
+  onDone: () => void;
+  onCancel?: () => void; // when starting over, to keep the current budget instead
+}) {
+  const open = budget.buckets.filter((b) => !b.archived);
+  const [typed, setTyped] = useState<Record<number, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const available = budget.available_cents;
+  const check = available === null ? null : checkOpening(available, open.map((b) => typed[b.id] ?? ""));
+
+  async function start() {
+    setSaving(true);
+    const problem = await send("/budget/start", "POST", {
+      start_date: toIsoDate(new Date()),
+      opening: open.map((b) => ({
+        bucket_id: b.id,
+        amount_cents: parseDollars(typed[b.id] ?? "") ?? 0,
+      })),
+    });
+    setSaving(false);
+    setError(problem);
+    if (!problem) {
+      reload();
+      onDone();
+    }
+  }
+
+  async function remove(b: Bucket) {
+    setError(await send(`/buckets/${b.id}`, "DELETE"));
+    reload();
+  }
+
+  return (
+    <>
+      <p className="max-w-2xl text-sm text-muted-foreground">
+        Give every dollar a job. Buckets are labels for parts of your money (rent, groceries, a
+        Switch 2); the money itself stays in your accounts. Start by making your buckets, then
+        split the money you have today across them. Anything you leave out stays{" "}
+        <strong>unassigned</strong>, free to give a job later.
+      </p>
+      {onCancel && (
+        <p className="text-sm">
+          Starting over replaces everything you&apos;ve put in buckets so far.{" "}
+          <button type="button" className="underline" onClick={onCancel}>
+            Keep my current budget
+          </button>
+        </p>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>1. Your buckets</CardTitle>
+          <CardDescription>
+            Recurring buckets get spent every paycheck (rent, groceries). Goals are things you
+            save up for, with a target.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {open.length > 0 && (
+            <ul className="flex flex-col divide-y text-sm">
+              {open.map((b) => (
+                <li key={b.id} className="flex items-center justify-between gap-3 py-2">
+                  <span>
+                    {b.name}{" "}
+                    <span className="text-muted-foreground">
+                      · {b.type === "goal" ? `Goal, ${formatCurrency(b.target_amount_cents!)}` : "Recurring"}
+                    </span>
+                  </span>
+                  {b.allocated_cents === 0 && (
+                    <Button variant="ghost" size="sm" onClick={() => remove(b)}>
+                      Remove
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          <NewBucketForm onCreated={reload} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>2. Split your money</CardTitle>
+          <CardDescription>
+            {available === null ? (
+              <>
+                The budget needs your bank balances to know how much you have.{" "}
+                <Link href="/accounts" className="underline">
+                  Connect a bank
+                </Link>{" "}
+                first.
+              </>
+            ) : (
+              <>
+                You have <strong className="tabular">{formatCurrency(available)}</strong>{" "}
+                available: cash minus what you owe on cards, as of{" "}
+                {timeAgo(budget.available_as_of!)}.
+              </>
+            )}
+          </CardDescription>
+        </CardHeader>
+        {available !== null && check && (
+          <CardContent className="flex flex-col gap-3 text-sm">
+            {open.length === 0 ? (
+              <p className="text-muted-foreground">Make a bucket first.</p>
+            ) : (
+              <>
+                <ul className="flex flex-col gap-2">
+                  {open.map((b) => (
+                    <li key={b.id} className="flex items-center gap-3">
+                      <Label htmlFor={`opening-${b.id}`} className="min-w-40 flex-1 font-normal">
+                        {b.name}
+                      </Label>
+                      <MoneyInput
+                        id={`opening-${b.id}`}
+                        value={typed[b.id] ?? ""}
+                        onChange={(v) => setTyped((t) => ({ ...t, [b.id]: v }))}
+                      />
+                    </li>
+                  ))}
+                </ul>
+                <p className={cn("tabular", check.leftCents < 0 && "text-destructive")}>
+                  Left unassigned: <strong>{formatCurrency(check.leftCents)}</strong>
+                </p>
+                {(check.problem ?? error) && (
+                  <p className="text-destructive">{check.problem ?? error}</p>
+                )}
+                <div>
+                  <Button onClick={start} disabled={saving || check.problem !== null}>
+                    {saving ? "Saving…" : `Start budgeting from today`}
+                  </Button>
+                </div>
+              </>
+            )}
+          </CardContent>
+        )}
+      </Card>
+    </>
+  );
+}
+
+// --- Overview: the running budget ---------------------------------------------------------
+
+function Overview({
+  budget,
+  reload,
+  onStartOver,
+}: {
+  budget: Budget;
+  reload: () => void;
+  onStartOver: () => void;
+}) {
+  const open = budget.buckets.filter((b) => !b.archived);
+  const archived = budget.buckets.filter((b) => b.archived);
+  const unassigned = budget.unassigned_cents;
+
+  return (
+    <>
+      <Card>
+        <CardContent className="flex flex-col gap-3">
+          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Stat
+              label="Unassigned"
+              cents={unassigned}
+              tone={unassigned === null ? undefined : unassigned < 0 ? "negative" : "positive"}
+            />
+            <Stat label="In buckets" cents={budget.assigned_cents} />
+            <Stat label="Available" cents={budget.available_cents} />
+          </dl>
+          <p className="text-sm text-muted-foreground">
+            {unassigned === null
+              ? "Connect a bank on the Accounts page to see what's unassigned."
+              : unassigned < 0
+                ? "More is in buckets than you actually have. Take some back from a bucket."
+                : unassigned > 0
+                  ? "Unassigned money has no job yet. Add it to a bucket."
+                  : "Every dollar has a job."}{" "}
+            Budgeting since {formatDay(budget.start_date!)}
+            {budget.available_as_of && `; balances from ${timeAgo(budget.available_as_of)}`}.
+          </p>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {open.map((b) => (
+          <BucketCard key={b.id} bucket={b} others={open.filter((o) => o.id !== b.id)} reload={reload} />
+        ))}
+        <Card>
+          <CardHeader>
+            <CardTitle>Add a bucket</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <NewBucketForm onCreated={reload} />
+          </CardContent>
+        </Card>
+      </div>
+
+      {archived.length > 0 && (
+        <section className="flex flex-col gap-2 text-sm">
+          <h2 className="font-medium">Archived</h2>
+          <ul className="flex flex-wrap gap-2">
+            {archived.map((b) => (
+              <ArchivedBucket key={b.id} bucket={b} reload={reload} />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <p className="text-sm text-muted-foreground">
+        Want a clean slate?{" "}
+        <button type="button" className="underline" onClick={onStartOver}>
+          Start over
+        </button>
+      </p>
+    </>
+  );
+}
+
+function Stat({
+  label,
+  cents,
+  tone,
+}: {
+  label: string;
+  cents: number | null;
+  tone?: "positive" | "negative";
+}) {
+  return (
+    <div>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd
+        className={cn(
+          "text-2xl font-semibold tabular",
+          tone === "positive" && "text-positive",
+          tone === "negative" && "text-destructive",
+        )}
+      >
+        {cents === null ? "—" : formatCurrency(cents)}
+      </dd>
+    </div>
+  );
+}
+
+type Panel = "money" | "move" | "edit" | null;
+
+function BucketCard({
+  bucket: b,
+  others,
+  reload,
+}: {
+  bucket: Bucket;
+  others: Bucket[];
+  reload: () => void;
+}) {
+  const [panel, setPanel] = useState<Panel>(null);
+  const [error, setError] = useState<string | null>(null);
+  const toggle = (p: Panel) => {
+    setError(null);
+    setPanel((current) => (current === p ? null : p));
+  };
+
+  /** Runs a change; closes the panel when it works, shows the error when it doesn't. */
+  async function change(path: string, method: string, body?: object) {
+    const problem = await send(path, method, body);
+    setError(problem);
+    if (!problem) {
+      setPanel(null);
+      reload();
+    }
+  }
+
+  async function archive() {
+    const leftover =
+      b.balance_cents !== 0 ? ` Its ${formatCurrency(b.balance_cents)} goes back to unassigned.` : "";
+    if (window.confirm(`Archive ${b.name}?${leftover}`)) {
+      await change(`/buckets/${b.id}`, "PATCH", { archived: true });
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{b.name}</CardTitle>
+        <CardDescription>{b.type === "goal" ? "Goal" : "Recurring"}</CardDescription>
+        <CardAction>
+          <p
+            className={cn(
+              "text-2xl font-semibold tabular",
+              b.balance_cents < 0 && "text-destructive",
+            )}
+          >
+            {formatCurrency(b.balance_cents)}
+          </p>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 text-sm">
+        {b.balance_cents < 0 && (
+          <Badge variant="destructive" className="w-fit">
+            Overspent: move money in to cover it
+          </Badge>
+        )}
+        {b.type === "goal" && b.target_amount_cents !== null && (
+          <div className="flex flex-col gap-1">
+            <div
+              className="h-2 overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+              aria-label={`${b.name} progress`}
+              aria-valuenow={b.progress_pct ?? 0}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div className="h-full rounded-full bg-positive" style={{ width: `${b.progress_pct ?? 0}%` }} />
+            </div>
+            <p className="text-muted-foreground">
+              {formatCurrency(Math.max(b.balance_cents, 0))} of{" "}
+              {formatCurrency(b.target_amount_cents)} ·{" "}
+              {goalStatus(b.balance_cents, b.target_amount_cents, b.target_date)}
+            </p>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-1">
+          <Button variant={panel === "money" ? "secondary" : "outline"} size="sm" onClick={() => toggle("money")}>
+            Add or take out
+          </Button>
+          {others.length > 0 && (
+            <Button variant={panel === "move" ? "secondary" : "outline"} size="sm" onClick={() => toggle("move")}>
+              Move
+            </Button>
+          )}
+          <Button variant={panel === "edit" ? "secondary" : "ghost"} size="sm" onClick={() => toggle("edit")}>
+            Edit
+          </Button>
+          <Button variant="ghost" size="sm" onClick={archive}>
+            Archive
+          </Button>
+        </div>
+
+        {panel === "money" && (
+          <MoneyPanel
+            onSubmit={(cents, direction) =>
+              change("/budget/assign", "POST", {
+                bucket_id: b.id,
+                amount_cents: direction === "in" ? cents : -cents,
+              })
+            }
+          />
+        )}
+        {panel === "move" && (
+          <MovePanel
+            from={b}
+            others={others}
+            onSubmit={(toId, cents) =>
+              change("/budget/move", "POST", {
+                from_bucket_id: b.id,
+                to_bucket_id: toId,
+                amount_cents: cents,
+              })
+            }
+          />
+        )}
+        {panel === "edit" && (
+          <EditPanel bucket={b} onSubmit={(fields) => change(`/buckets/${b.id}`, "PATCH", fields)} />
+        )}
+        {error && <p className="text-destructive">{error}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MoneyPanel({ onSubmit }: { onSubmit: (cents: number, direction: "in" | "out") => void }) {
+  const [text, setText] = useState("");
+  const cents = parseDollars(text);
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <MoneyInput value={text} onChange={setText} aria-label="Amount" autoFocus />
+      <Button size="sm" disabled={cents === null} onClick={() => onSubmit(cents!, "in")}>
+        Add from unassigned
+      </Button>
+      <Button size="sm" variant="outline" disabled={cents === null} onClick={() => onSubmit(cents!, "out")}>
+        Take back
+      </Button>
+    </div>
+  );
+}
+
+function MovePanel({
+  from,
+  others,
+  onSubmit,
+}: {
+  from: Bucket;
+  others: Bucket[];
+  onSubmit: (toId: number, cents: number) => void;
+}) {
+  const [text, setText] = useState("");
+  const [to, setTo] = useState(String(others[0].id));
+  const cents = parseDollars(text);
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <MoneyInput value={text} onChange={setText} aria-label="Amount to move" autoFocus />
+      <span>to</span>
+      <Select
+        items={Object.fromEntries(others.map((o) => [String(o.id), o.name]))}
+        value={to}
+        onValueChange={(v) => setTo(v as string)}
+      >
+        <SelectTrigger className="w-44" aria-label={`Move from ${from.name} to`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {others.map((o) => (
+            <SelectItem key={o.id} value={String(o.id)}>
+              {o.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button size="sm" disabled={cents === null} onClick={() => onSubmit(Number(to), cents!)}>
+        Move
+      </Button>
+    </div>
+  );
+}
+
+function EditPanel({
+  bucket: b,
+  onSubmit,
+}: {
+  bucket: Bucket;
+  onSubmit: (fields: object) => void;
+}) {
+  const [name, setName] = useState(b.name);
+  const [target, setTarget] = useState(b.target_amount_cents ? String(b.target_amount_cents / 100) : "");
+  const [date, setDate] = useState(b.target_date ?? "");
+  const targetCents = parseDollars(target);
+  const goal = b.type === "goal";
+  const ok = name.trim() !== "" && (!goal || targetCents !== null);
+
+  return (
+    <form
+      className="flex flex-col gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit(
+          goal
+            ? { name, target_amount_cents: targetCents, target_date: date || null }
+            : { name },
+        );
+      }}
+    >
+      <Label className="flex flex-col items-start gap-1 font-normal">
+        Name
+        <Input value={name} onChange={(e) => setName(e.target.value)} className="w-56" />
+      </Label>
+      {goal && (
+        <div className="flex flex-wrap gap-3">
+          <Label className="flex flex-col items-start gap-1 font-normal">
+            Target
+            <MoneyInput value={target} onChange={setTarget} />
+          </Label>
+          <Label className="flex flex-col items-start gap-1 font-normal">
+            By (optional)
+            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40" />
+          </Label>
+        </div>
+      )}
+      <div>
+        <Button type="submit" size="sm" disabled={!ok}>
+          Save
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function ArchivedBucket({ bucket: b, reload }: { bucket: Bucket; reload: () => void }) {
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <li className="flex items-center gap-1 rounded-md border px-2 py-1">
+      {b.name}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={async () => {
+          const problem = await send(`/buckets/${b.id}`, "PATCH", { archived: false });
+          setError(problem);
+          if (!problem) reload();
+        }}
+      >
+        Unarchive
+      </Button>
+      {error && <span className="text-destructive">{error}</span>}
+    </li>
+  );
+}
+
+// --- Shared pieces ------------------------------------------------------------------------
+
+function NewBucketForm({ onCreated }: { onCreated: () => void }) {
+  const [name, setName] = useState("");
+  const [type, setType] = useState<"recurring" | "goal">("recurring");
+  const [target, setTarget] = useState("");
+  const [date, setDate] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const targetCents = parseDollars(target);
+  const ok = name.trim() !== "" && (type === "recurring" || targetCents !== null);
+
+  async function create(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    const problem = await send("/buckets", "POST", {
+      name,
+      type,
+      ...(type === "goal" ? { target_amount_cents: targetCents, target_date: date || null } : {}),
+    });
+    setSaving(false);
+    setError(problem);
+    if (!problem) {
+      setName("");
+      setTarget("");
+      setDate("");
+      onCreated();
+    }
+  }
+
+  return (
+    <form onSubmit={create} className="flex flex-col gap-3 text-sm">
+      <div className="flex flex-wrap items-end gap-3">
+        <Label className="flex flex-col items-start gap-1 font-normal">
+          Name
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={type === "goal" ? "Switch 2" : "Groceries"}
+            className="w-48"
+          />
+        </Label>
+        <fieldset className="flex flex-col gap-1">
+          <legend className="mb-1">Kind</legend>
+          <div className="flex gap-1">
+            {(["recurring", "goal"] as const).map((t) => (
+              <Button
+                key={t}
+                type="button"
+                size="sm"
+                variant={type === t ? "secondary" : "outline"}
+                aria-pressed={type === t}
+                onClick={() => setType(t)}
+              >
+                {t === "goal" ? "Goal" : "Recurring"}
+              </Button>
+            ))}
+          </div>
+        </fieldset>
+      </div>
+      {type === "goal" && (
+        <div className="flex flex-wrap gap-3">
+          <Label className="flex flex-col items-start gap-1 font-normal">
+            Target
+            <MoneyInput value={target} onChange={setTarget} placeholder="500" />
+          </Label>
+          <Label className="flex flex-col items-start gap-1 font-normal">
+            By (optional)
+            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40" />
+          </Label>
+        </div>
+      )}
+      <div>
+        <Button type="submit" size="sm" disabled={!ok || saving}>
+          {saving ? "Adding…" : "Add bucket"}
+        </Button>
+      </div>
+      {error && <p className="text-destructive">{error}</p>}
+    </form>
+  );
+}
+
+function MoneyInput({
+  value,
+  onChange,
+  ...props
+}: Omit<React.ComponentProps<typeof Input>, "value" | "onChange"> & {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="relative w-32">
+      <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground">
+        $
+      </span>
+      <Input
+        {...props}
+        inputMode="decimal"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="pl-6 text-right tabular"
+        placeholder={props.placeholder ?? "0.00"}
+      />
+    </div>
+  );
+}

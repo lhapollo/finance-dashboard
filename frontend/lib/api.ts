@@ -199,3 +199,26 @@ export function useApi<T>(path: string, refreshKey = 0) {
   const reload = useCallback(() => setVersion((v) => v + 1), []);
   return { data, error, reload };
 }
+
+/** A bucket: a job for some of my money. Mirrors BucketOut in backend/app/schemas.py. */
+export type Bucket = {
+  id: number;
+  name: string;
+  type: "recurring" | "goal";
+  target_amount_cents: number | null; // required for goals
+  target_date: string | null; // optional, goals only
+  archived: boolean;
+  allocated_cents: number;
+  balance_cents: number; // what's in it now
+  progress_pct: number | null; // goals: balance as a % of the target
+};
+
+/** The whole budget. unassigned = available - in buckets. */
+export type Budget = {
+  start_date: string | null; // null until the fresh-start setup is done
+  available_cents: number | null; // null: no bank balances (connect a bank)
+  available_as_of: string | null;
+  assigned_cents: number;
+  unassigned_cents: number | null; // negative: more in buckets than you have
+  buckets: Bucket[]; // open first, archived last
+};
