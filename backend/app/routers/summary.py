@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.db import get_session
 from app.schemas import (
     AccountActivity,
+    BalanceSummary,
     CategoryTotal,
     MonthSummary,
     PeriodCategoryTotal,
@@ -15,6 +16,7 @@ from app.schemas import (
 from app.services.summaries import (
     account_activity,
     add_months,
+    balance_summary,
     month_start,
     month_summary,
     spending_by_category,
@@ -87,3 +89,8 @@ def get_account_activity(session: SessionDep, month: MonthParam = None) -> list[
     transaction as the bank shows it, for checking against bank statements. Also the date
     range of everything imported for it, so you can tell when it needs a newer CSV."""
     return account_activity(session, _parse_month(month))
+
+
+@router.get("/balances")
+def balances(session: SessionDep) -> BalanceSummary:
+    return balance_summary(session)

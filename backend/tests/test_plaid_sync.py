@@ -16,14 +16,15 @@ from app.services.secrets import encrypt_token
 
 TOKEN = "access-production-abc"
 
-# Plaid's view of a Tangerine login: its three accounts.
+# Plaid's view of a Tangerine login: its three accounts, with balances as Plaid reports them
+# (a credit card's positive balance is money owed).
 PLAID_ACCOUNTS = [
     {"account_id": "pa-card", "name": "Mastercard", "mask": "4536", "type": "credit",
-     "subtype": "credit card"},
+     "subtype": "credit card", "balances": {"current": 691.06}},
     {"account_id": "pa-chq", "name": "Chequing", "mask": "9003", "type": "depository",
-     "subtype": "checking"},
+     "subtype": "checking", "balances": {"current": 2500.1}},
     {"account_id": "pa-sav", "name": "Savings", "mask": "9041", "type": "depository",
-     "subtype": "savings"},
+     "subtype": "savings", "balances": {"current": 8000.0}},
 ]  # fmt: skip
 
 
@@ -425,3 +426,35 @@ def test_reconnecting_uses_update_mode(client, fake, item):
     path, body = fake.calls[-1]
     assert body["access_token"] == TOKEN  # the existing login, not a new one
     assert "products" not in body
+
+
+# --- balances ---
+
+
+def test_sync_saves_balances_signed_like_transactions(
+    client, fake, linked, card, chequing, savings
+):
+    fake.page("", "c1")
+    sync(client)
+    assert (card.balance_cents, chequing.balance_cents, savings.balance_cents) == (
+        -69106,
+        250010,
+        800000,
+    )
+    assert chequing.balance_updated_at is not None
+
+
+def test_available_money_is_cash_minus_card_debt(client, fake, linked, db_session):
+    fake.page("", "c1")
+    sync(client)
+    body = client.get("/summary/balances").json()
+    assert (body["cash_cents"], body["owed_cents"], body["available_cents"]) == (
+        1050010,
+        69106,
+        980904,
+    )
+    assert body["missing"] == ["CIBC Credit Card"]  # not on Plaid, so no balance
+
+    cibc = db_session.scalar(select(Account).where(Account.name == "CIBC Credit Card"))
+    client.patch(f"/accounts/{cibc.id}", json={"closed_on": "2026-11-20"})
+    assert client.get("/summary/balances").json()["missing"] == []

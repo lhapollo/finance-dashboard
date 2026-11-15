@@ -7,7 +7,13 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 // These mirror backend/app/schemas.py. Money is always integer cents.
 
-export type Account = { id: number; name: string; institution: string; type: string };
+export type Account = {
+  id: number;
+  name: string;
+  institution: string;
+  type: string;
+  closed_on: string | null; // set once I've closed it, e.g. cancelled a card
+};
 
 export type Transaction = {
   id: number;
@@ -74,6 +80,17 @@ export type AccountActivity = Account & {
   first_date: string | null; // oldest transaction imported, any month
   last_date: string | null; // newest transaction imported, any month
   plaid_linked: boolean; // new transactions come from Plaid, not CSVs
+  balance_cents: number | null; // from the bank via Plaid; negative = owed
+  balance_updated_at: string | null;
+};
+
+/** Money right now, from bank balances. available = cash - owed. Closed accounts left out. */
+export type BalanceSummary = {
+  cash_cents: number;
+  owed_cents: number; // on credit cards, positive
+  available_cents: number;
+  as_of: string | null; // the oldest balance in the total
+  missing: string[]; // open accounts with no balance (not on Plaid)
 };
 
 export type ImportResult = {

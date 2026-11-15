@@ -22,6 +22,7 @@ import hashlib
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 from pydantic import ValidationError
@@ -83,6 +84,7 @@ def sync_item(session: Session, plaid: PlaidClient, item_id: int) -> SyncResult:
     try:
         token = decrypt_token(item.access_token)
         added, modified, removed, cursor = _fetch_changes(plaid, token, item.cursor)
+        balances = plaid.post("/accounts/get", {"access_token": token})["accounts"]
     except (PlaidError, TokenKeyError) as e:
         item.status = e.code if isinstance(e, PlaidError) else "TOKEN_KEY_CHANGED"
         session.commit()
@@ -93,8 +95,14 @@ def sync_item(session: Session, plaid: PlaidClient, item_id: int) -> SyncResult:
     result.unlinked_accounts = sorted({t["account_id"] for t in added + modified} - accounts.keys())
     _Applier(session, item, accounts, result).apply(added, modified, removed)
 
+    now = datetime.now(UTC)
+    for pa in balances:
+        if (account := accounts.get(pa["account_id"])) is not None:
+            account.balance_cents = _balance_cents(pa, account)
+            account.balance_updated_at = now
+
     item.cursor = cursor
-    item.last_synced_at = datetime.now(UTC)
+    item.last_synced_at = now
     item.status = "ok"
     session.flush()
     detect_transfers(session)
@@ -102,6 +110,16 @@ def sync_item(session: Session, plaid: PlaidClient, item_id: int) -> SyncResult:
     apply_rules(session)
     session.commit()
     return result
+
+
+def _balance_cents(plaid_account: dict[str, Any], account: Account) -> int | None:
+    """Plaid's current balance, signed like our transactions. Plaid reports what a credit
+    card owes as a positive number; to us money owed is negative."""
+    current = plaid_account["balances"].get("current")
+    if current is None:
+        return None
+    cents = int((Decimal(str(current)) * 100).quantize(Decimal(1)))
+    return -cents if account.type == "credit" else cents
 
 
 def _fetch_changes(

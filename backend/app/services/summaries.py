@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session, aliased
 from app.models import Account, Transaction, TransactionSplit
 from app.schemas import (
     AccountActivity,
+    BalanceSummary,
     CategoryTotal,
     MonthSummary,
     PeriodCategoryTotal,
@@ -184,7 +185,7 @@ def account_activity(session: Session, month: date) -> list[AccountActivity]:
         )
         .outerjoin(Transaction, Transaction.account_id == Account.id)
         .group_by(Account.id)
-        .order_by(Account.id)
+        .order_by(Account.closed_on.is_not(None), Account.id)  # closed ones last
     )
     return [
         AccountActivity(
@@ -198,6 +199,27 @@ def account_activity(session: Session, month: date) -> list[AccountActivity]:
             first_date=first,
             last_date=last,
             plaid_linked=a.plaid_account_id is not None,
+            closed_on=a.closed_on,
+            balance_cents=a.balance_cents,
+            balance_updated_at=a.balance_updated_at,
         )
         for a, money_in, money_out, count, first, last in rows
     ]
+
+
+def balance_summary(session: Session) -> BalanceSummary:
+    """Cash, money owed on cards, and what's left, from the balances banks report through
+    Plaid. Open accounts only. Investments (a TFSA) aren't spending money, so they're out."""
+    accounts = session.scalars(
+        select(Account).where(Account.closed_on.is_(None), Account.type != "investment")
+    ).all()
+    known = [a for a in accounts if a.balance_cents is not None]
+    cash = sum(a.balance_cents for a in known if a.type != "credit")
+    owed = -sum(a.balance_cents for a in known if a.type == "credit")
+    return BalanceSummary(
+        cash_cents=cash,
+        owed_cents=owed,
+        available_cents=cash - owed,
+        as_of=min((a.balance_updated_at for a in known), default=None),
+        missing=[a.name for a in accounts if a.balance_cents is None],
+    )

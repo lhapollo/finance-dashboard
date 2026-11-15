@@ -40,6 +40,13 @@ class AccountOut(BaseModel):
     name: str
     institution: str
     type: str
+    closed_on: date | None
+
+
+class AccountUpdate(BaseModel):
+    """Fields I can change on an account. Leave a field out to keep it as is."""
+
+    closed_on: date | None = None  # null reopens it
 
 
 def _tidy_category(v: str) -> str:
@@ -194,6 +201,25 @@ class AccountActivity(BaseModel):
     first_date: date | None  # the oldest transaction imported, any month
     last_date: date | None  # the newest transaction imported, any month
     plaid_linked: bool  # new transactions come from Plaid, not CSVs
+    closed_on: date | None
+    balance_cents: int | None  # from the bank via Plaid; negative = owed
+    balance_updated_at: datetime | None
+
+
+class BalanceSummary(BaseModel):
+    """Money I have right now, from the balances Plaid reports. Closed accounts are left out.
+
+    available = cash - owed: money on credit cards is already spent, so the cash that will
+    pay those cards off isn't free to spend again.
+    """
+
+    cash_cents: int  # chequing + savings
+    owed_cents: int  # on credit cards (positive)
+    available_cents: int
+    # The oldest balance used, so the page can say how fresh the total is.
+    as_of: datetime | None
+    # Open accounts with no balance (not linked to Plaid), so not in the totals.
+    missing: list[str]
 
 
 class ImportResult(BaseModel):

@@ -23,6 +23,13 @@ class Account(Base):
     # The last day CSV imports cover, set when the account is linked to Plaid. CSV rows after
     # it are skipped on import: Plaid owns those days, and the two would duplicate each other.
     csv_cutoff_date: Mapped[date | None] = mapped_column(Date)
+    # Set once I've closed the account (e.g. cancelled a card). Its history stays; it just
+    # stops expecting new transactions and isn't counted in available money.
+    closed_on: Mapped[date | None] = mapped_column(Date)
+    # The balance as the bank last reported it through Plaid, signed like transactions:
+    # negative = money I owe (a credit card's balance). None for CSV-only accounts.
+    balance_cents: Mapped[int | None] = mapped_column(Integer)
+    balance_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="account")
     plaid_item: Mapped["PlaidItem | None"] = relationship(back_populates="accounts")
