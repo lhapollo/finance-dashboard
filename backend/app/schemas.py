@@ -105,6 +105,10 @@ class TransactionOut(BaseModel):
     # The parts this transaction is split into; empty if it isn't split. When there are
     # parts, they count instead of the whole transaction.
     splits: list[SplitOut]
+    # Set only when I picked the bucket by hand (bucket_assigned_by = "manual"); otherwise
+    # the category's default bucket applies.
+    bucket_id: int | None
+    bucket_assigned_by: str | None
     source: str  # csv / plaid
     pending: bool  # Plaid only: not final yet, the amount can still change
     imported_at: datetime
@@ -134,6 +138,10 @@ class TransactionUpdate(BaseModel):
     rename_all: bool = False
     reimburses_id: int | None = None
     reimbursable: bool | None = None
+    # The bucket this spending comes out of, picked by hand (null: no bucket). Send
+    # bucket_auto: true instead to go back to the category's default bucket.
+    bucket_id: int | None = None
+    bucket_auto: bool = False
 
     @field_validator("description")
     @classmethod
@@ -298,6 +306,10 @@ class BucketIn(BaseModel):
     type: Literal["recurring", "goal"]
     target_amount_cents: int | None = Field(default=None, gt=0, strict=True)
     target_date: date | None = None
+    # Make this the category's default bucket (the "Make a bucket" button on a category).
+    # Without it, a bucket named like a category still becomes its default; see
+    # services/budget.py link_matching_category.
+    category: str | None = Field(default=None, min_length=1, max_length=50)
 
     @field_validator("name")
     @classmethod
@@ -325,7 +337,8 @@ class BucketOut(BaseModel):
     target_date: date | None
     archived: bool
     allocated_cents: int  # put in, minus taken out, since the budget started
-    balance_cents: int  # what's in it now
+    spent_cents: int  # spending out of it since the budget started (refunds lower it)
+    balance_cents: int  # allocated - spent: what's left in it now
     progress_pct: int | None  # goals: balance as a % of the target (0-100)
 
 
@@ -339,7 +352,20 @@ class BudgetOut(BaseModel):
     # available - assigned. None when available is unknown. Negative means more is in
     # buckets than you actually have.
     unassigned_cents: int | None
+    # Spending since the start that no bucket covers (its category has no bucket). It still
+    # lowers available money, so it comes out of unassigned.
+    unbucketed_spent_cents: int
     buckets: list[BucketOut]  # open ones first, archived last
+
+
+class CategoryBucketOut(BaseModel):
+    category: str
+    bucket_id: int | None  # its default bucket, if it has one
+    spent_cents: int  # spending in this category since the budget started
+
+
+class CategoryBucketIn(BaseModel):
+    bucket_id: int | None  # None: no default bucket
 
 
 class OpeningBalance(BaseModel):

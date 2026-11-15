@@ -6,7 +6,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_session
-from app.models import Transaction, TransactionSplit
+from app.models import Bucket, Transaction, TransactionSplit
 from app.schemas import (
     RecategorizeResult,
     SplitIn,
@@ -14,8 +14,10 @@ from app.schemas import (
     TransactionPage,
     TransactionUpdate,
 )
+from app.services.budget import start_date
 from app.services.categories import apply_rules
 from app.services.renames import apply_renames, rename_merchant
+from app.services.summaries import transactions_in_bucket
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -40,6 +42,8 @@ def list_transactions(
     search: Annotated[str | None, Query(max_length=100)] = None,
     money: Literal["in", "out"] | None = None,
     reimbursable: bool | None = None,
+    bucket_id: int | None = None,
+    unbucketed: bool = False,
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
     order: Literal["desc", "asc"] = "desc",
@@ -50,8 +54,17 @@ def list_transactions(
 
     category matches the category a row counts toward, so a payback linked to a dinner shows
     up under dining, and a split transaction shows up under each of its parts' categories.
-    money=out is only money out, money=in only money in."""
+    money=out is only money out, money=in only money in.
+
+    bucket_id: spending that comes out of that bucket since the budget started (refunds and
+    paybacks into it too); unbucketed=true: spending since then that no bucket covers."""
     filters = []
+    if bucket_id is not None or unbucketed:
+        budget_start = start_date(session)
+        if budget_start is None:
+            filters.append(False)  # no budget yet, so nothing comes out of a bucket
+        else:
+            filters.append(Transaction.id.in_(transactions_in_bucket(bucket_id, budget_start)))
     if account_id is not None:
         filters.append(Transaction.account_id == account_id)
     if category is not None:
@@ -156,6 +169,19 @@ def update_transaction(
     if update.category is not None:
         t.category = update.category
         t.category_source = "manual"
+
+    if update.bucket_auto:
+        t.bucket_id, t.bucket_assigned_by = None, None
+    elif "bucket_id" in update.model_fields_set:
+        if t.reimburses is not None:
+            raise HTTPException(
+                400, "a payback goes back into its purchase's bucket; change it on the purchase"
+            )
+        if update.bucket_id is not None:
+            bucket = session.get(Bucket, update.bucket_id)
+            if bucket is None or bucket.archived:
+                raise HTTPException(400, "pick an open bucket")
+        t.bucket_id, t.bucket_assigned_by = update.bucket_id, "manual"
 
     if t.splits and (
         update.is_transfer

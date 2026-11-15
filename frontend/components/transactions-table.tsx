@@ -30,6 +30,8 @@ export type TransactionFilters = {
   money?: "in" | "out";
   is_transfer?: boolean; // false hides transfers
   reimbursable?: boolean; // true shows only purchases someone will pay back
+  bucket_id?: number; // spending out of this bucket since the budget started
+  unbucketed?: boolean; // true: spending since then that no bucket covers
   start?: string;
   end?: string;
   search?: string;

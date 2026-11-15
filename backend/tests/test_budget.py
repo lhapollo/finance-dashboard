@@ -1,23 +1,11 @@
 """Buckets, the fresh-start split, assigning and moving money."""
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 
-import pytest
 from sqlalchemy import select
 
-from app.models import Account, Allocation
+from app.models import Allocation
 from app.services.format import dollars
-
-
-@pytest.fixture
-def money(db_session, chequing, savings):
-    """$1,000 in chequing, $2,000 in savings, $200 owed on the Mastercard: $2,800 available."""
-    card = db_session.scalar(select(Account).where(Account.name == "Tangerine Mastercard"))
-    now = datetime.now(UTC)
-    for account, cents in [(chequing, 100_000), (savings, 200_000), (card, -20_000)]:
-        account.balance_cents = cents
-        account.balance_updated_at = now
-    db_session.flush()
 
 
 def make(client, name, type="recurring", **fields):

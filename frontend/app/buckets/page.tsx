@@ -17,8 +17,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api, useApi, type Bucket, type Budget } from "@/lib/api";
+import { api, query, useApi, type Bucket, type Budget, type CategoryBucket } from "@/lib/api";
 import { checkOpening, goalStatus } from "@/lib/budget";
+import {
+  ALL_CATEGORIES,
+  INCOME_CATEGORIES,
+  categoryColor,
+  categoryLabel,
+} from "@/lib/categories";
 import { formatCurrency, formatDay, timeAgo, toIsoDate } from "@/lib/format";
 import { parseDollars } from "@/lib/splits";
 import { useAutoSync } from "@/lib/use-auto-sync";
@@ -264,6 +270,16 @@ function Overview({
             Budgeting since {formatDay(budget.start_date!)}
             {budget.available_as_of && `; balances from ${timeAgo(budget.available_as_of)}`}.
           </p>
+          {budget.unbucketed_spent_cents !== 0 && (
+            <p className="text-sm">
+              <strong className="tabular">{formatCurrency(budget.unbucketed_spent_cents)}</strong>{" "}
+              of spending since then isn&apos;t from any bucket, so it came out of unassigned.{" "}
+              <Link href={`/transactions${query({ unbucketed: true })}`} className="underline">
+                See it
+              </Link>{" "}
+              or give its categories a bucket below.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -280,6 +296,8 @@ function Overview({
           </CardContent>
         </Card>
       </div>
+
+      <CategoryDefaults buckets={open} startDate={budget.start_date!} onChanged={reload} />
 
       {archived.length > 0 && (
         <section className="flex flex-col gap-2 text-sm">
@@ -380,6 +398,12 @@ function BucketCard({
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
+        <p className="text-muted-foreground">
+          {formatCurrency(b.allocated_cents)} put in · {formatCurrency(b.spent_cents)} spent ·{" "}
+          <Link href={`/transactions${query({ bucket_id: b.id })}`} className="underline">
+            See spending
+          </Link>
+        </p>
         {b.balance_cents < 0 && (
           <Badge variant="destructive" className="w-fit">
             Overspent: move money in to cover it
@@ -578,6 +602,116 @@ function ArchivedBucket({ bucket: b, reload }: { bucket: Bucket; reload: () => v
       </Button>
       {error && <span className="text-destructive">{error}</span>}
     </li>
+  );
+}
+
+/** Which bucket each category's spending comes out of by default. */
+function CategoryDefaults({
+  buckets,
+  startDate,
+  onChanged,
+}: {
+  buckets: Bucket[];
+  startDate: string;
+  onChanged: () => void;
+}) {
+  const { data, error, reload } = useApi<CategoryBucket[]>("/budget/categories");
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  /** A new recurring bucket named after the category, and made its default. */
+  async function makeBucket(category: string) {
+    const problem = await send("/buckets", "POST", {
+      name: categoryLabel(category),
+      type: "recurring",
+      category,
+    });
+    setSaveError(problem);
+    reload();
+    onChanged();
+  }
+
+  async function choose(category: string, value: string) {
+    const problem = await send(`/budget/categories/${encodeURIComponent(category)}`, "PUT", {
+      bucket_id: value === "none" ? null : Number(value),
+    });
+    setSaveError(problem);
+    reload();
+    onChanged();
+  }
+
+  const items: Record<string, string> = {
+    none: "No bucket",
+    ...Object.fromEntries(buckets.map((b) => [String(b.id), b.name])),
+  };
+  // Every spending category, so defaults can be set before there's any spending: the
+  // backend's list (biggest spending first), then the rest.
+  const rows: CategoryBucket[] | null = data && [
+    ...data,
+    ...ALL_CATEGORIES.filter(
+      (c) => !INCOME_CATEGORIES.includes(c) && !data.some((d) => d.category === c),
+    ).map((c) => ({ category: c, bucket_id: null, spent_cents: 0 })),
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Which bucket pays for what</CardTitle>
+        <CardDescription>
+          Spending comes out of its category&apos;s bucket. This applies to everything since{" "}
+          {formatDay(startDate)}, so changing it re-sorts past spending too. To use a different
+          bucket for one purchase, open it on the Transactions page. A bucket named like a
+          category (say, &ldquo;Transport&rdquo;) is picked for it automatically.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="text-sm">
+        {error && <p className="text-destructive">{error}</p>}
+        {rows && (
+          <ul className="flex flex-col divide-y">
+            {rows.map((c) => (
+              <li key={c.category} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+                <span className="flex min-w-40 flex-1 items-center gap-2">
+                  <span
+                    className="size-2.5 rounded-[3px]"
+                    style={{ background: categoryColor(c.category) }}
+                  />
+                  {categoryLabel(c.category)}
+                  {c.spent_cents !== 0 && (
+                    <span className="text-muted-foreground tabular">
+                      {formatCurrency(c.spent_cents)} spent
+                    </span>
+                  )}
+                </span>
+                {c.bucket_id === null && (
+                  <Button variant="ghost" size="sm" onClick={() => makeBucket(c.category)}>
+                    Make a bucket
+                  </Button>
+                )}
+                <Select
+                  items={items}
+                  value={c.bucket_id === null ? "none" : String(c.bucket_id)}
+                  onValueChange={(v) => choose(c.category, v as string)}
+                >
+                  <SelectTrigger
+                    className={cn("w-48", c.bucket_id === null && c.spent_cents > 0 && "border-destructive")}
+                    aria-label={`Bucket for ${categoryLabel(c.category)}`}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(items).map(([v, label]) => (
+                      <SelectItem key={v} value={v}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </li>
+            ))}
+          </ul>
+        )}
+        {saveError && <p className="text-destructive">{saveError}</p>}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -38,6 +38,10 @@ export type Transaction = {
   reimbursable: boolean;
   reimbursement_status: "waiting" | "received" | null; // null unless reimbursable
   splits: Split[]; // empty unless split; when split, the parts count instead of the whole
+  // Set only when I picked the bucket by hand ("manual"; bucket_id null = no bucket).
+  // Otherwise the category's default bucket applies (see CategoryBucket).
+  bucket_id: number | null;
+  bucket_assigned_by: "manual" | null;
   source: "csv" | "plaid";
   pending: boolean; // Plaid only: not final yet, the amount can still change
   imported_at: string;
@@ -208,8 +212,9 @@ export type Bucket = {
   target_amount_cents: number | null; // required for goals
   target_date: string | null; // optional, goals only
   archived: boolean;
-  allocated_cents: number;
-  balance_cents: number; // what's in it now
+  allocated_cents: number; // put in, minus taken out
+  spent_cents: number; // spending out of it since the budget started
+  balance_cents: number; // allocated - spent: what's left
   progress_pct: number | null; // goals: balance as a % of the target
 };
 
@@ -220,5 +225,13 @@ export type Budget = {
   available_as_of: string | null;
   assigned_cents: number;
   unassigned_cents: number | null; // negative: more in buckets than you have
+  unbucketed_spent_cents: number; // spending since the start that no bucket covers
   buckets: Bucket[]; // open first, archived last
+};
+
+/** A spending category and the bucket its spending comes out of by default. */
+export type CategoryBucket = {
+  category: string;
+  bucket_id: number | null;
+  spent_cents: number; // since the budget started
 };

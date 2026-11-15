@@ -14,10 +14,12 @@ import {
   query,
   useApi,
   type Account,
+  type Budget,
+  type CategoryBucket,
   type Transaction,
   type TransactionPage,
 } from "@/lib/api";
-import { ALL_CATEGORIES, categoryColor, categoryLabel } from "@/lib/categories";
+import { ALL_CATEGORIES, INCOME_CATEGORIES, categoryColor, categoryLabel } from "@/lib/categories";
 import { checkSplit, parseDollars } from "@/lib/splits";
 import { addDays, formatCurrency, formatDay, parseDate } from "@/lib/format";
 import { foreignAmount } from "@/lib/transactions";
@@ -151,6 +153,7 @@ function Details({
               </span>
             )}
           </Row>
+          <BucketRow t={t} onSaved={saved} />
           {!t.is_transfer && t.amount_cents > 0 && t.splits.length === 0 && !splitting && (
             <Row label="Pays back">
               <PaysBack t={t} accounts={accounts} onSelect={onSelect} onSaved={saved} />
@@ -231,6 +234,83 @@ function canSplit(t: Transaction) {
     !t.reimbursable &&
     t.reimburses_id === null &&
     t.reimbursement_ids.length === 0
+  );
+}
+
+/** Values in the bucket picker besides bucket ids. */
+const AUTO = "auto";
+const NO_BUCKET = "none";
+
+/**
+ * Which bucket this spending comes out of: the category's default unless picked by hand.
+ * Hidden when buckets don't apply: before the budget started, transfers, reimbursable
+ * purchases and income.
+ */
+function BucketRow({ t, onSaved }: { t: Transaction; onSaved: () => void }) {
+  const { data: budget } = useApi<Budget>("/budget");
+  const { data: defaults } = useApi<CategoryBucket[]>("/budget/categories");
+  const { patch, busy, error } = usePatch(t.id, onSaved);
+
+  if (!budget?.start_date || !defaults) return null;
+  if (t.date < budget.start_date || t.is_transfer || t.reimbursable) return null;
+  const split = t.splits.length > 0;
+  if (!split && INCOME_CATEGORIES.includes(t.counted_category)) return null;
+
+  const open = budget.buckets.filter((b) => !b.archived);
+  const nameOf = (id: number | null) =>
+    id === null ? "no bucket" : (budget.buckets.find((b) => b.id === id)?.name ?? "…");
+
+  if (t.reimburses_id !== null) {
+    return (
+      <Row label="Bucket">
+        <span className="text-muted-foreground">Goes back into its purchase&apos;s bucket</span>
+      </Row>
+    );
+  }
+
+  const defaultId = defaults.find((d) => d.category === t.counted_category)?.bucket_id ?? null;
+  const autoLabel = split
+    ? "Each part's category decides"
+    : `From its category: ${nameOf(defaultId)}`;
+  const value =
+    t.bucket_assigned_by !== "manual" ? AUTO : t.bucket_id === null ? NO_BUCKET : String(t.bucket_id);
+  const items: Record<string, string> = {
+    [AUTO]: autoLabel,
+    ...Object.fromEntries(open.map((b) => [String(b.id), b.name])),
+    [NO_BUCKET]: "No bucket",
+    // A hand-picked bucket that's since been archived still shows its name.
+    ...(t.bucket_id !== null && value === String(t.bucket_id)
+      ? { [value]: nameOf(t.bucket_id) }
+      : {}),
+  };
+
+  return (
+    <Row label="Bucket">
+      <Select
+        items={items}
+        value={value}
+        disabled={busy}
+        onValueChange={(v) =>
+          patch(
+            v === AUTO
+              ? { bucket_auto: true }
+              : { bucket_id: v === NO_BUCKET ? null : Number(v) },
+          )
+        }
+      >
+        <SelectTrigger className="w-64" aria-label="Bucket this comes out of">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {Object.entries(items).map(([v, label]) => (
+            <SelectItem key={v} value={v}>
+              {label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {error && <p className="text-destructive">{error}</p>}
+    </Row>
   );
 }
 

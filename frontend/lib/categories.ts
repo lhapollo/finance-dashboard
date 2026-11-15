@@ -40,6 +40,9 @@ export function seriesFor(category: string): string {
 }
 
 /** The CSS color for a category's swatch or chart mark. */
+/** Money in these categories is income: it doesn't come out of (or go into) a bucket. */
+export const INCOME_CATEGORIES = ["income", "rewards"];
+
 export function categoryColor(category: string): string {
   const slot = (CATEGORY_SLOTS as readonly string[]).indexOf(category);
   return slot === -1 ? "var(--cat-other)" : `var(--cat-${slot + 1})`;

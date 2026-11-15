@@ -25,7 +25,7 @@ from typing import Literal
 from sqlalchemy import Date, case, cast, exists, func, literal, select, union_all
 from sqlalchemy.orm import Session, aliased
 
-from app.models import Account, Transaction, TransactionSplit
+from app.models import Account, CategoryBucket, Transaction, TransactionSplit
 from app.schemas import (
     AccountActivity,
     BalanceSummary,
@@ -40,6 +40,7 @@ INCOME_CATEGORIES = ("income", "rewards")
 _is_split = exists().where(TransactionSplit.transaction_id == Transaction.id)
 _entries = union_all(
     select(
+        Transaction.id.label("transaction_id"),
         Transaction.date,
         Transaction.amount_cents,
         Transaction.category,
@@ -50,6 +51,7 @@ _entries = union_all(
     # A part takes its date and transfer flag from its transaction. A split transaction
     # can't be reimbursable, so neither can its parts.
     select(
+        Transaction.id,
         Transaction.date,
         TransactionSplit.amount_cents,
         TransactionSplit.category,
@@ -223,3 +225,40 @@ def balance_summary(session: Session) -> BalanceSummary:
         as_of=min((a.balance_updated_at for a in known), default=None),
         missing=[a.name for a in accounts if a.balance_cents is None],
     )
+
+
+# --- Buckets ---------------------------------------------------------------------------
+# Which bucket an entry's spending comes out of: a bucket picked by hand wins, otherwise the
+# category's default bucket. On a payback the purchase decides, so getting $40 back for a
+# dinner refills the bucket the dinner came out of.
+_owner = aliased(Transaction)  # the entry's own transaction (for a part, the split one)
+_decider_manual = case(
+    (_purchase.id.is_not(None), _purchase.bucket_assigned_by), else_=_owner.bucket_assigned_by
+)
+_decider_bucket = case((_purchase.id.is_not(None), _purchase.bucket_id), else_=_owner.bucket_id)
+_bucket = case((_decider_manual == "manual", _decider_bucket), else_=CategoryBucket.bucket_id)
+_FOREVER = date(9999, 12, 31)
+
+
+def _bucketed(*columns, start: date):
+    """Like _counted, over spending (not income) from `start` on, with _bucket available."""
+    return (
+        _counted(*columns, start=start, end=_FOREVER)
+        .join(_owner, _owner.id == _entries.c.transaction_id)
+        .outerjoin(CategoryBucket, CategoryBucket.category == _category)
+        .where(~_is_income)
+    )
+
+
+def spent_by_bucket(session: Session, start: date) -> dict[int | None, int]:
+    """Spending since `start` per bucket id; None is spending no bucket covers."""
+    bucket = _bucket.label("bucket")
+    rows = session.execute(_bucketed(bucket, -func.sum(_amount), start=start).group_by(bucket))
+    return {b: int(total) for b, total in rows}
+
+
+def transactions_in_bucket(bucket_id: int | None, start: date):
+    """A subquery of the ids of transactions whose spending since `start` comes out of the
+    bucket (None: out of no bucket), for filtering the transactions list."""
+    match = _bucket.is_(None) if bucket_id is None else _bucket == bucket_id
+    return _bucketed(_entries.c.transaction_id, start=start).where(match)

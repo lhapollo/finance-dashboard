@@ -14,7 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { query, useApi, type Account } from "@/lib/api";
+import { query, useApi, type Account, type Budget } from "@/lib/api";
 import { useAutoSync } from "@/lib/use-auto-sync";
 import { ALL_CATEGORIES, categoryColor, categoryLabel } from "@/lib/categories";
 import { addDays, datePresets, type DateRange } from "@/lib/format";
@@ -50,12 +50,15 @@ function FilteredTransactions() {
 
   const money = params.get("money");
   const accountId = Number(params.get("account_id"));
+  const bucketId = Number(params.get("bucket_id"));
   const filters: TransactionFilters = {
     account_id: Number.isInteger(accountId) && accountId > 0 ? accountId : undefined,
     category: params.get("category") ?? undefined,
     money: money === "in" || money === "out" ? money : undefined,
     is_transfer: params.get("is_transfer") === "false" ? false : undefined,
     reimbursable: params.get("reimbursable") === "true" ? true : undefined,
+    bucket_id: Number.isInteger(bucketId) && bucketId > 0 ? bucketId : undefined,
+    unbucketed: params.get("unbucketed") === "true" ? true : undefined,
     start: params.get("start") ?? undefined,
     end: params.get("end") ?? undefined,
     search: params.get("search") ?? undefined,
@@ -64,6 +67,8 @@ function FilteredTransactions() {
   const [search, setSearch] = useState(filters.search ?? "");
   const { data: accounts } = useApi<Account[]>("/accounts");
   const { syncKey } = useAutoSync();
+  const { data: budget } = useApi<Budget>("/budget");
+  const bucketName = budget?.buckets.find((b) => b.id === filters.bucket_id)?.name ?? "…";
   const accountItems = {
     ...ALL_ACCOUNTS,
     // "…" until the names load, rather than flashing the account's id.
@@ -88,6 +93,8 @@ function FilteredTransactions() {
     filters.money ||
     filters.is_transfer === false ||
     filters.reimbursable ||
+    filters.bucket_id ||
+    filters.unbucketed ||
     filters.start ||
     filters.end ||
     filters.search;
@@ -202,6 +209,18 @@ function FilteredTransactions() {
               aria-label="Stop showing only reimbursable purchases"
             >
               Reimbursable only ×
+            </Button>
+          )}
+          {(filters.bucket_id || filters.unbucketed) && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setFilters({ ...filters, bucket_id: undefined, unbucketed: undefined })}
+              aria-label="Stop showing only one bucket's spending"
+              title="Spending since your budget started"
+            >
+              {filters.unbucketed ? "No bucket" : `Bucket: ${bucketName}`} ×
             </Button>
           )}
           {anyFilter && (

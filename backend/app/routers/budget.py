@@ -7,15 +7,31 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.models import Allocation, Bucket, BudgetSettings
-from app.schemas import AssignIn, BucketIn, BucketUpdate, BudgetOut, BudgetStart, MoveIn
-from app.services.budget import bucket_balances, budget, start_date
+from app.models import Allocation, Bucket, BudgetSettings, CategoryBucket
+from app.schemas import (
+    AssignIn,
+    BucketIn,
+    BucketUpdate,
+    BudgetOut,
+    BudgetStart,
+    CategoryBucketIn,
+    CategoryBucketOut,
+    MoveIn,
+)
+from app.services.budget import (
+    bucket_balances,
+    budget,
+    category_buckets,
+    link_matching_category,
+    start_date,
+)
 from app.services.format import dollars
+from app.services.summaries import INCOME_CATEGORIES
 
 router = APIRouter(tags=["budget"])
 
@@ -31,8 +47,20 @@ def get_budget(session: SessionDep) -> BudgetOut:
 def create_bucket(body: BucketIn, session: SessionDep) -> BudgetOut:
     if body.type == "goal" and body.target_amount_cents is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "a goal needs a target amount")
-    session.add(Bucket(**body.model_dump()))
-    _commit_unique_name(session, body.name)
+    if body.category in INCOME_CATEGORIES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{body.category} is income, not spending")
+    bucket = Bucket(**body.model_dump(exclude={"category"}))
+    session.add(bucket)
+    _save_unique_name(session, body.name)  # also gives the bucket its id
+    if body.category is not None:
+        current = session.get(CategoryBucket, body.category)
+        if current is None:
+            session.add(CategoryBucket(category=body.category, bucket_id=bucket.id))
+        else:
+            current.bucket_id = bucket.id
+    else:
+        link_matching_category(session, bucket)
+    session.commit()
     return budget(session)
 
 
@@ -42,6 +70,8 @@ def update_bucket(bucket_id: int, body: BucketUpdate, session: SessionDep) -> Bu
     changes = body.model_dump(exclude_unset=True)
 
     if changes.get("archived") and not bucket.archived:
+        # Categories stop defaulting to it; their spending is unbucketed until given another.
+        session.execute(delete(CategoryBucket).where(CategoryBucket.bucket_id == bucket.id))
         # Its leftover goes back to unassigned, so archived buckets never hold money.
         leftover = bucket_balances(session)[bucket.id]
         if leftover != 0:
@@ -61,7 +91,10 @@ def update_bucket(bucket_id: int, body: BucketUpdate, session: SessionDep) -> Bu
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "a goal needs a target amount")
     for field, value in changes.items():
         setattr(bucket, field, value)
-    _commit_unique_name(session, bucket.name)
+    _save_unique_name(session, bucket.name)
+    if "name" in changes and not bucket.archived:
+        link_matching_category(session, bucket)
+    session.commit()
     return budget(session)
 
 
@@ -76,6 +109,33 @@ def delete_bucket(bucket_id: int, session: SessionDep) -> None:
         )
     session.delete(bucket)
     session.commit()
+
+
+@router.get("/budget/categories")
+def get_category_buckets(session: SessionDep) -> list[CategoryBucketOut]:
+    return category_buckets(session)
+
+
+@router.put("/budget/categories/{category}")
+def set_category_bucket(
+    category: str, body: CategoryBucketIn, session: SessionDep
+) -> list[CategoryBucketOut]:
+    """Which bucket a category's spending comes out of by default (bucket_id null: none).
+    Applies to past spending too, except transactions whose bucket was picked by hand."""
+    if category in INCOME_CATEGORIES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{category} is income, not spending")
+    current = session.get(CategoryBucket, category)
+    if body.bucket_id is None:
+        if current is not None:
+            session.delete(current)
+    else:
+        _open_bucket(session, body.bucket_id)
+        if current is None:
+            session.add(CategoryBucket(category=category, bucket_id=body.bucket_id))
+        else:
+            current.bucket_id = body.bucket_id
+    session.commit()
+    return category_buckets(session)
 
 
 @router.post("/budget/start")
@@ -210,9 +270,10 @@ def _require_started(session: Session) -> None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "set up the budget first")
 
 
-def _commit_unique_name(session: Session, name: str) -> None:
+def _save_unique_name(session: Session, name: str) -> None:
+    """Send pending changes to the database, turning a taken bucket name into a clear 409."""
     try:
-        session.commit()
+        session.flush()
     except IntegrityError:
         session.rollback()
         raise HTTPException(

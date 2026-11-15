@@ -6,7 +6,7 @@ other's rows and nothing is left behind.
 
 import itertools
 import os
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
@@ -130,3 +130,14 @@ def add(db_session):
         return t
 
     return add
+
+
+@pytest.fixture
+def money(db_session, chequing, savings):
+    """$1,000 in chequing, $2,000 in savings, $200 owed on the Mastercard: $2,800 available."""
+    card = db_session.scalar(select(Account).where(Account.name == "Tangerine Mastercard"))
+    now = datetime.now(UTC)
+    for account, cents in [(chequing, 100_000), (savings, 200_000), (card, -20_000)]:
+        account.balance_cents = cents
+        account.balance_updated_at = now
+    db_session.flush()

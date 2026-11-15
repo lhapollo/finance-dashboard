@@ -75,6 +75,11 @@ class Transaction(Base):
     plaid_transaction_id: Mapped[str | None] = mapped_column(String(100), unique=True)
     # Not final yet (Plaid only): the amount can still change, e.g. when a tip is added.
     pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa_false())
+    # Which bucket this spending comes out of. Normally that follows the category (see
+    # CategoryBucket) and isn't stored; these are only set when I pick one by hand:
+    # bucket_assigned_by = "manual", with bucket_id the bucket, or None for "no bucket".
+    bucket_id: Mapped[int | None] = mapped_column(ForeignKey("buckets.id", ondelete="SET NULL"))
+    bucket_assigned_by: Mapped[str | None] = mapped_column(String(10))
     imported_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -252,3 +257,13 @@ class BudgetSettings(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, default=1)
     start_date: Mapped[date] = mapped_column(Date)
+
+
+class CategoryBucket(Base):
+    """The bucket a category's spending comes out of by default, e.g. groceries -> Food.
+    Worked out when totals are calculated, so changing it re-sorts past spending too."""
+
+    __tablename__ = "category_buckets"
+
+    category: Mapped[str] = mapped_column(String(50), primary_key=True)
+    bucket_id: Mapped[int] = mapped_column(ForeignKey("buckets.id", ondelete="CASCADE"))
