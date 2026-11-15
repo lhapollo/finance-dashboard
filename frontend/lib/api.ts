@@ -163,6 +163,20 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+/** Sends a change and returns the error message, or null when it worked. */
+export async function send(path: string, method: string, body?: object): Promise<string | null> {
+  try {
+    await api(path, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return null;
+  } catch (e) {
+    return (e as Error).message;
+  }
+}
+
 /** Builds "?a=1&b=2", skipping empty values. */
 export function query(params: Record<string, string | number | boolean | null | undefined>) {
   const search = new URLSearchParams();
@@ -234,4 +248,55 @@ export type CategoryBucket = {
   category: string;
   bucket_id: number | null;
   spent_cents: number; // since the budget started
+};
+
+/** How to recognize a paycheck: money in to `account_id` whose description contains
+ * `match_text`. */
+export type IncomeSource = {
+  id: number;
+  name: string;
+  account_id: number;
+  match_text: string;
+  active: boolean;
+};
+
+/** A deposit that keeps coming in as income, so probably a paycheck. */
+export type IncomeSourceSuggestion = {
+  account_id: number;
+  match_text: string;
+  count: number;
+  last_date: string;
+  last_amount_cents: number;
+};
+
+/** One line of the usual paycheck split. Fixed amounts apply first, then percents of what's
+ * left after them. */
+export type PaycheckRule = {
+  bucket_id: number;
+  kind: "fixed" | "percent";
+  amount_cents: number | null;
+  percent: number | null;
+};
+
+export type BucketAmount = { bucket_id: number; amount_cents: number };
+
+export type Paycheck = {
+  transaction_id: number;
+  date: string;
+  description: string;
+  account_id: number;
+  deposit_cents: number;
+  paycheck_cents: number; // the pay part (a split deposit's income parts)
+  detected: boolean;
+  override: boolean | null; // marked by hand
+  is_paycheck: boolean;
+  splittable: boolean; // on or after the budget start
+  split: BucketAmount[];
+  split_cents: number;
+};
+
+export type PaycheckSplitSuggestion = {
+  paycheck_cents: number;
+  suggested: BucketAmount[];
+  leftover_cents: number;
 };

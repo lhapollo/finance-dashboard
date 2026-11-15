@@ -2,6 +2,7 @@ from datetime import date, datetime
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy import false as sa_false
+from sqlalchemy import true as sa_true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -80,6 +81,9 @@ class Transaction(Base):
     # bucket_assigned_by = "manual", with bucket_id the bucket, or None for "no bucket".
     bucket_id: Mapped[int | None] = mapped_column(ForeignKey("buckets.id", ondelete="SET NULL"))
     bucket_assigned_by: Mapped[str | None] = mapped_column(String(10))
+    # Whether this is a paycheck, when I said so by hand (True / False). None: follow
+    # detection, which is worked out from IncomeSource rather than stored.
+    paycheck_override: Mapped[bool | None] = mapped_column(Boolean)
     imported_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -267,3 +271,34 @@ class CategoryBucket(Base):
 
     category: Mapped[str] = mapped_column(String(50), primary_key=True)
     bucket_id: Mapped[int] = mapped_column(ForeignKey("buckets.id", ondelete="CASCADE"))
+
+
+class IncomeSource(Base):
+    """How to recognize a paycheck: money in to `account` whose description contains
+    `match_text`, e.g. "Rippling" into Tangerine Chequing."""
+
+    __tablename__ = "income_sources"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))  # e.g. "Internship pay"
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"))
+    match_text: Mapped[str] = mapped_column(String(100))
+    active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa_true())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    account: Mapped[Account] = relationship()
+
+
+class PaycheckRule(Base):
+    """One line of how a paycheck is usually split: a fixed amount ($1,500 to Rent) or a
+    percent of what's left after the fixed amounts (20% to Investing). Suggestions only:
+    every split is confirmed on the paycheck screen before anything is saved."""
+
+    __tablename__ = "paycheck_rules"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    bucket_id: Mapped[int] = mapped_column(ForeignKey("buckets.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(10))  # fixed / percent
+    amount_cents: Mapped[int | None] = mapped_column(Integer)  # fixed rules
+    percent: Mapped[int | None] = mapped_column(Integer)  # percent rules, 1-100
+    priority: Mapped[int] = mapped_column(Integer)  # order they're applied in, within a kind

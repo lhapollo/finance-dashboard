@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class StandardTransaction(BaseModel):
@@ -395,3 +395,96 @@ class MoveIn(BaseModel):
     to_bucket_id: int
     amount_cents: int = Field(gt=0, strict=True)
     note: str | None = Field(default=None, max_length=200)
+
+
+class IncomeSourceIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    account_id: int
+    match_text: str = Field(min_length=2, max_length=100)
+    active: bool = True
+
+    @field_validator("name", "match_text")
+    @classmethod
+    def tidy(cls, v: str) -> str:
+        v = " ".join(v.split())
+        if not v:
+            raise ValueError("is blank")
+        return v
+
+
+class IncomeSourceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    account_id: int
+    match_text: str
+    active: bool
+
+
+class IncomeSourceSuggestion(BaseModel):
+    """A deposit that keeps showing up as income: probably a paycheck."""
+
+    account_id: int
+    match_text: str  # the deposit's cleaned-up name, e.g. "Rippling Canada"
+    count: int  # how many times it came in
+    last_date: date
+    last_amount_cents: int
+
+
+class PaycheckRuleIn(BaseModel):
+    bucket_id: int
+    kind: Literal["fixed", "percent"]
+    amount_cents: int | None = Field(default=None, gt=0, strict=True)  # fixed
+    percent: int | None = Field(default=None, ge=1, le=100, strict=True)  # percent
+
+    @model_validator(mode="after")
+    def one_value(self) -> "PaycheckRuleIn":
+        if self.kind == "fixed" and (self.amount_cents is None or self.percent is not None):
+            raise ValueError("a fixed rule needs amount_cents (and no percent)")
+        if self.kind == "percent" and (self.percent is None or self.amount_cents is not None):
+            raise ValueError("a percent rule needs percent (and no amount_cents)")
+        return self
+
+
+class PaycheckRuleOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    bucket_id: int
+    kind: str
+    amount_cents: int | None
+    percent: int | None
+
+
+class BucketAmount(BaseModel):
+    bucket_id: int
+    amount_cents: int = Field(ge=0, strict=True)
+
+
+class PaycheckOut(BaseModel):
+    transaction_id: int
+    date: date
+    description: str
+    account_id: int
+    deposit_cents: int  # the whole deposit
+    # The part that's pay: the whole deposit, or a split deposit's income parts (a work
+    # reimbursement that came with the pay isn't pay).
+    paycheck_cents: int
+    detected: bool  # an income source recognizes it
+    override: bool | None  # what I said by hand, if anything
+    is_paycheck: bool
+    # Can be split into buckets: on or after the budget start. Earlier paychecks were
+    # already in the money the fresh start split up.
+    splittable: bool
+    split: list[BucketAmount]  # what's been put into buckets from it
+    split_cents: int
+
+
+class PaycheckSplitSuggestion(BaseModel):
+    paycheck_cents: int
+    suggested: list[BucketAmount]  # from the paycheck rules
+    leftover_cents: int  # what the rules leave unassigned
+
+
+class PaycheckMark(BaseModel):
+    is_paycheck: bool | None  # None: back to detection

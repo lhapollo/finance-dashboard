@@ -5,6 +5,7 @@ import { Suspense, useState } from "react";
 
 import { CategoryBreakdown } from "@/components/category-breakdown";
 import { MonthPicker } from "@/components/month-picker";
+import { PaycheckReminder } from "@/components/paycheck-reminder";
 import { SpendingChart } from "@/components/spending-chart";
 import { StatCard } from "@/components/stat-card";
 import { TransactionsTable } from "@/components/transactions-table";
@@ -89,6 +90,8 @@ function Dashboard() {
           detail="Income minus spending"
         />
       </div>
+
+      <PaycheckReminder refreshKey={syncKey} />
 
       {owed && owed.count > 0 && (
         <p className="text-sm text-muted-foreground">

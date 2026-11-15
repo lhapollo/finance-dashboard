@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.models import Allocation, Bucket, BudgetSettings, CategoryBucket
+from app.models import Allocation, Bucket, BudgetSettings, CategoryBucket, PaycheckRule
 from app.schemas import (
     AssignIn,
     BucketIn,
@@ -72,6 +72,7 @@ def update_bucket(bucket_id: int, body: BucketUpdate, session: SessionDep) -> Bu
     if changes.get("archived") and not bucket.archived:
         # Categories stop defaulting to it; their spending is unbucketed until given another.
         session.execute(delete(CategoryBucket).where(CategoryBucket.bucket_id == bucket.id))
+        session.execute(delete(PaycheckRule).where(PaycheckRule.bucket_id == bucket.id))
         # Its leftover goes back to unassigned, so archived buckets never hold money.
         leftover = bucket_balances(session)[bucket.id]
         if leftover != 0:

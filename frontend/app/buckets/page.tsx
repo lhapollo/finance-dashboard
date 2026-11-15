@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { Suspense, useState } from "react";
 
+import { MoneyInput } from "@/components/money-input";
+import { PaycheckReminder } from "@/components/paycheck-reminder";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api, query, useApi, type Bucket, type Budget, type CategoryBucket } from "@/lib/api";
+import { query, send, useApi, type Bucket, type Budget, type CategoryBucket } from "@/lib/api";
 import { checkOpening, goalStatus } from "@/lib/budget";
 import {
   ALL_CATEGORIES,
@@ -37,20 +39,6 @@ export default function BucketsPage() {
       <Buckets />
     </Suspense>
   );
-}
-
-/** Sends a change and returns the error message, or null when it worked. */
-async function send(path: string, method: string, body?: object): Promise<string | null> {
-  try {
-    await api(path, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    return null;
-  } catch (e) {
-    return (e as Error).message;
-  }
 }
 
 function Buckets() {
@@ -248,6 +236,8 @@ function Overview({
 
   return (
     <>
+      {/* Splitting a paycheck changes unassigned money, so that's what reloads it. */}
+      <PaycheckReminder refreshKey={budget.unassigned_cents ?? 0} />
       <Card>
         <CardContent className="flex flex-col gap-3">
           <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -311,7 +301,10 @@ function Overview({
       )}
 
       <p className="text-sm text-muted-foreground">
-        Want a clean slate?{" "}
+        <Link href="/buckets/paychecks" className="underline">
+          Paychecks and your usual split
+        </Link>{" "}
+        · Want a clean slate?{" "}
         <button type="button" className="underline" onClick={onStartOver}>
           Start over
         </button>
@@ -795,30 +788,5 @@ function NewBucketForm({ onCreated }: { onCreated: () => void }) {
       </div>
       {error && <p className="text-destructive">{error}</p>}
     </form>
-  );
-}
-
-function MoneyInput({
-  value,
-  onChange,
-  ...props
-}: Omit<React.ComponentProps<typeof Input>, "value" | "onChange"> & {
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="relative w-32">
-      <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground">
-        $
-      </span>
-      <Input
-        {...props}
-        inputMode="decimal"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="pl-6 text-right tabular"
-        placeholder={props.placeholder ?? "0.00"}
-      />
-    </div>
   );
 }

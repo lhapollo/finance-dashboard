@@ -34,15 +34,17 @@ export function AppSidebar() {
         <span>FinDash</span>
       </div>
       <nav className="flex gap-1 overflow-x-auto md:flex-col">
-        {NAV.map(({ href, label, icon: Icon }) =>
-          href ? (
+        {NAV.map(({ href, label, icon: Icon }) => {
+          // A page inside a section (/buckets/paychecks) highlights the section too.
+          const here = href !== null && (pathname === href || (href !== "/" && pathname.startsWith(`${href}/`)));
+          return href ? (
             <Link
               key={label}
               href={href}
-              aria-current={pathname === href ? "page" : undefined}
+              aria-current={here ? "page" : undefined}
               className={cn(
                 "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm whitespace-nowrap transition-colors hover:bg-sidebar-accent",
-                pathname === href && "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
+                here && "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
               )}
             >
               <Icon className="size-4" />
@@ -58,8 +60,8 @@ export function AppSidebar() {
               {label}
               <span className="ml-auto text-[10px] tracking-wide uppercase">Soon</span>
             </span>
-          ),
-        )}
+          );
+        })}
       </nav>
     </aside>
   );
