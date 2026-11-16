@@ -21,7 +21,7 @@ const NAV = [
   { href: "/import", label: "Import", icon: UploadIcon },
   // Later phases; shown so the layout matches the plan.
   { href: "/buckets", label: "Buckets", icon: PiggyBankIcon },
-  { href: null, label: "Ask", icon: MessageCircleIcon },
+  { href: "/ask", label: "Ask", icon: MessageCircleIcon },
 ];
 
 export function AppSidebar() {

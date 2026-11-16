@@ -21,6 +21,7 @@ from app.schemas import (
     PaycheckSplitSuggestion,
 )
 from app.services.budget import start_date
+from app.services.clock import today
 from app.services.format import dollars
 from app.services.paychecks import detected, is_paycheck, list_paychecks, suggest_split
 
@@ -80,7 +81,7 @@ def suggest_income_sources(session: SessionDep) -> list[IncomeSourceSuggestion]:
     coming in, not an old job's) and no income source
     recognizes yet. Biggest total first: paychecks stand out by size, while small regular
     deposits like interest come in just as often. At most five."""
-    since = date.today() - _PREVIEW
+    since = today() - _PREVIEW
     rows = session.execute(
         select(
             Transaction.account_id,
@@ -161,7 +162,7 @@ def get_paychecks(session: SessionDep) -> list[PaycheckOut]:
     """Paychecks since the budget started, newest first. Before it starts, the last 90 days,
     to check that detection finds the right deposits."""
     budget_start = start_date(session)
-    since = budget_start or date.today() - _PREVIEW
+    since = budget_start or today() - _PREVIEW
     return list_paychecks(session, since, budget_start)
 
 

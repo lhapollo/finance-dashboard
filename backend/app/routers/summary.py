@@ -13,6 +13,7 @@ from app.schemas import (
     PeriodCategoryTotal,
     ReimbursementSummary,
 )
+from app.services.clock import today
 from app.services.summaries import (
     account_activity,
     add_months,
@@ -33,7 +34,7 @@ MonthParam = Annotated[str | None, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$", exa
 
 def _parse_month(month: str | None) -> date:
     if month is None:
-        return month_start(date.today())
+        return month_start(today())
     year, m = month.split("-")
     return date(int(year), int(m), 1)
 
@@ -52,7 +53,7 @@ def get_spending_by_category(
 ) -> list[CategoryTotal]:
     """Spending per category, largest first. start is included, end isn't.
     Leave both out for the current month."""
-    this_month = month_start(date.today())
+    this_month = month_start(today())
     start = start or this_month
     end = end or add_months(start, 1)
     if end <= start:

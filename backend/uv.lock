@@ -171,6 +171,7 @@ dependencies = [
     { name = "python-multipart" },
     { name = "pyyaml" },
     { name = "sqlalchemy" },
+    { name = "tzdata" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -191,6 +192,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.12" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "sqlalchemy", specifier = ">=2.0.36" },
+    { name = "tzdata", specifier = ">=2025.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
 ]
 

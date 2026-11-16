@@ -488,3 +488,24 @@ class PaycheckSplitSuggestion(BaseModel):
 
 class PaycheckMark(BaseModel):
     is_paycheck: bool | None  # None: back to detection
+
+
+class ChatTurn(BaseModel):
+    role: Literal["user", "model"]
+    text: str = Field(max_length=4000)
+
+
+class AskIn(BaseModel):
+    question: str = Field(min_length=1, max_length=1000)
+    history: list[ChatTurn] = Field(default_factory=list, max_length=20)
+
+
+class AskStep(BaseModel):
+    tool: str
+    arguments: dict
+    result: dict
+
+
+class AskOut(BaseModel):
+    answer: str
+    steps: list[AskStep]  # the tools used, so you can check where numbers came from

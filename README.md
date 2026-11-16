@@ -42,6 +42,31 @@ Optional: instead of downloading CSVs, new transactions can come straight from y
 
 Opening the dashboard syncs banks that haven't synced in 6 hours; **Sync now** on the Accounts page syncs right away. Transactions already imported from CSVs are matched by account, date and amount, so switching an account to Plaid adds nothing twice. After an account is linked, CSV rows after its last CSV day are skipped.
 
+## Demo with fake data
+
+A second copy of the app runs on made-up data (a year of transactions, a budget, paychecks), in its own `finance_demo` database, so it can be clicked through freely without touching real data:
+
+```bash
+docker compose --profile demo up -d    # then open http://localhost:3001
+docker compose exec backend-demo python -m app.demo --reset    # fresh fake data
+```
+
+Its Plaid is sandbox-only, so it can't connect a real bank.
+
+## Ask (AI chatbot)
+
+Questions in plain English ("how much did I spend on food last month vs September?"). The AI only picks which of the app's functions to call (`backend/app/ai/tools.py`); every number comes from the same code as the dashboard, and each answer shows the tools it used. Add a free `GEMINI_API_KEY` to `.env` (see `.env.example`).
+
+Gemini's free tier may use what it's sent for training, so Ask refuses to send real data: it only answers on the demo (http://localhost:3001/ask).
+
+Accuracy is measured with 25 questions about the demo data, each checked against the right numbers worked out by code:
+
+```bash
+docker compose exec backend-demo python -m app.ai.eval
+```
+
+Last run: 25/25 with `gemini-3.5-flash-lite`.
+
 ## Privacy
 
 Real bank CSVs go in `data/`, which is gitignored and never committed. Test fixtures use fake data only.

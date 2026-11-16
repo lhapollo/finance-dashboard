@@ -209,15 +209,33 @@ def account_activity(session: Session, month: date) -> list[AccountActivity]:
     ]
 
 
+def pending_by_account(session: Session) -> dict[int, int]:
+    """The total of each account's pending transactions (signed), by account id."""
+    rows = session.execute(
+        select(Transaction.account_id, func.sum(Transaction.amount_cents))
+        .where(Transaction.pending.is_(True))
+        .group_by(Transaction.account_id)
+    )
+    return {account_id: int(total) for account_id, total in rows}
+
+
 def balance_summary(session: Session) -> BalanceSummary:
     """Cash, money owed on cards, and what's left, from the balances banks report through
-    Plaid. Open accounts only. Investments (a TFSA) aren't spending money, so they're out."""
+    Plaid. Open accounts only. Investments (a TFSA) aren't spending money, so they're out.
+
+    The balance a bank reports leaves out pending transactions, but buckets already count
+    them. So each balance here includes its pending transactions, as if they'd posted.
+    Otherwise a pending $20 dinner lowers its bucket but not available money, and $20 seems
+    to appear in unassigned; and a pending card payment, already gone from chequing but
+    still owed on the card, gets subtracted twice."""
     accounts = session.scalars(
         select(Account).where(Account.closed_on.is_(None), Account.type != "investment")
     ).all()
+    pending = pending_by_account(session)
     known = [a for a in accounts if a.balance_cents is not None]
-    cash = sum(a.balance_cents for a in known if a.type != "credit")
-    owed = -sum(a.balance_cents for a in known if a.type == "credit")
+    balance = {a.id: a.balance_cents + pending.get(a.id, 0) for a in known}
+    cash = sum(balance[a.id] for a in known if a.type != "credit")
+    owed = -sum(balance[a.id] for a in known if a.type == "credit")
     return BalanceSummary(
         cash_cents=cash,
         owed_cents=owed,
@@ -262,3 +280,73 @@ def transactions_in_bucket(bucket_id: int | None, start: date):
     bucket (None: out of no bucket), for filtering the transactions list."""
     match = _bucket.is_(None) if bucket_id is None else _bucket == bucket_id
     return _bucketed(_entries.c.transaction_id, start=start).where(match)
+
+
+# --- For questions (the Ask page) --------------------------------------------------------
+# A payback counts toward the merchant of the purchase it pays back, like it counts toward
+# that purchase's category.
+_merchant = func.coalesce(_purchase.description, _owner.description)
+
+
+def _spending(*columns, start: date, end: date, categories: list[str] | None, merchant: str | None):
+    """Like _counted over spending only (not income), optionally narrowed to categories and
+    to merchants whose name contains `merchant` (any capitalization)."""
+    query = (
+        _counted(*columns, start=start, end=end)
+        .join(_owner, _owner.id == _entries.c.transaction_id)
+        .where(~_is_income)
+    )
+    if categories:
+        query = query.where(_category.in_(categories))
+    if merchant:
+        query = query.where(_merchant.icontains(merchant, autoescape=True))
+    return query
+
+
+def spending_total(
+    session: Session,
+    start: date,
+    end: date,
+    categories: list[str] | None = None,
+    merchant: str | None = None,
+) -> tuple[int, int]:
+    """(cents spent, how many purchases), refunds and paybacks subtracted."""
+    total, count = session.execute(
+        _spending(
+            func.coalesce(-func.sum(_amount), 0),
+            func.count().filter(_amount < 0),
+            start=start,
+            end=end,
+            categories=categories,
+            merchant=merchant,
+        )
+    ).one()
+    return int(total), int(count)
+
+
+def spending_by_merchant(
+    session: Session,
+    start: date,
+    end: date,
+    categories: list[str] | None = None,
+    limit: int = 5,
+) -> list[tuple[str, int, int]]:
+    """(merchant, cents spent, visits), biggest first."""
+    merchant = _merchant.label("merchant")
+    total = (-func.sum(_amount)).label("total")
+    rows = session.execute(
+        _spending(
+            merchant,
+            total,
+            func.count().filter(_amount < 0),
+            start=start,
+            end=end,
+            categories=categories,
+            merchant=None,
+        )
+        .group_by(merchant)
+        .having(func.sum(_amount) < 0)
+        .order_by(total.desc(), merchant)
+        .limit(limit)
+    )
+    return [(m, int(t), int(v)) for m, t, v in rows]

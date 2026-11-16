@@ -300,3 +300,12 @@ export type PaycheckSplitSuggestion = {
   suggested: BucketAmount[];
   leftover_cents: number;
 };
+
+/** One tool the AI used to answer, with what it asked for and what it got back. */
+export type AskStep = {
+  tool: string;
+  arguments: Record<string, unknown>;
+  result: Record<string, unknown>;
+};
+
+export type AskResponse = { answer: string; steps: AskStep[] };

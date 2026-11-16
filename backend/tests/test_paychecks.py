@@ -5,6 +5,7 @@ from datetime import date, timedelta
 import pytest
 
 from app.models import PaycheckRule
+from app.services.clock import today
 from app.services.paychecks import suggest_split
 
 PAY = "EFT Deposit from Rippling Canada"
@@ -99,10 +100,10 @@ def test_only_money_in_can_be_a_paycheck(client, chequing, add):
 
 
 def test_suggests_income_sources_from_repeat_deposits(client, chequing, add):
-    today = date.today()
-    for day in [today - timedelta(days=14), today]:
+    now = today()
+    for day in [now - timedelta(days=14), now]:
         add(chequing, day, 300_000, PAY, category="income", cleaned_description="Rippling Canada")
-    add(chequing, today, 2_000, "INTEREST", category="income")  # only once
+    add(chequing, now, 2_000, "INTEREST", category="income")  # only once
     [suggestion] = client.get("/income-sources/suggestions").json()
     assert suggestion["match_text"] == "Rippling Canada"
     assert suggestion["count"] == 2

@@ -21,3 +21,15 @@ PLAID_SECRET = os.environ.get(
 )
 # Key for encrypting access tokens before they're saved (see app/services/secrets.py).
 PLAID_TOKEN_KEY = os.environ.get("PLAID_TOKEN_KEY", "")
+
+# Whose "today" the app uses: budget dates, "this month", what counts as in the future. The
+# server runs in UTC, which is already tomorrow on a Toronto evening.
+TIMEZONE = os.environ.get("TIMEZONE", "America/Toronto")
+
+# The Ask page's AI (see app/ai/providers.py). Gemini's free tier may train on what it's
+# sent, so by default it only answers when the app is on the fake demo database.
+AI_PROVIDER = os.environ.get("AI_PROVIDER", "gemini")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
+# Set to "true" only once the provider is one you're OK sending real finances to.
+AI_ALLOW_REAL_DATA = os.environ.get("AI_ALLOW_REAL_DATA", "false").lower() == "true"

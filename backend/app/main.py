@@ -6,6 +6,7 @@ from app.config import FRONTEND_ORIGINS
 from app.plaid import PlaidError, PlaidNotConfigured
 from app.routers import (
     accounts,
+    ask,
     budget,
     imports,
     paychecks,
@@ -34,6 +35,7 @@ app.include_router(rename_rules.router)
 app.include_router(plaid.router)
 app.include_router(budget.router)
 app.include_router(paychecks.router)
+app.include_router(ask.router)
 
 
 # Plaid problems become clear messages for the page, in the same {"detail": ...} shape as

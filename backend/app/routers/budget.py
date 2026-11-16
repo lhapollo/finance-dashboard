@@ -3,7 +3,6 @@
 Every change returns the whole budget, so the page can redraw from one response.
 """
 
-from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -30,6 +29,7 @@ from app.services.budget import (
     link_matching_category,
     start_date,
 )
+from app.services.clock import today
 from app.services.format import dollars
 from app.services.summaries import INCOME_CATEGORIES
 
@@ -80,7 +80,7 @@ def update_bucket(bucket_id: int, body: BucketUpdate, session: SessionDep) -> Bu
                 Allocation(
                     bucket=bucket,
                     amount_cents=-leftover,
-                    date=date.today(),
+                    date=today(),
                     kind="archive",
                     note="Leftover back to unassigned",
                 )
@@ -143,7 +143,7 @@ def set_category_bucket(
 def start_budget(body: BudgetStart, session: SessionDep) -> BudgetOut:
     """The fresh start (or starting over): from start_date, split today's available money
     across buckets. Replaces every earlier allocation."""
-    if body.start_date > date.today():
+    if body.start_date > today():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "the start date can't be in the future")
     ids = [o.bucket_id for o in body.opening]
     if len(ids) != len(set(ids)):
@@ -214,7 +214,7 @@ def assign(body: AssignIn, session: SessionDep) -> BudgetOut:
         Allocation(
             bucket=bucket,
             amount_cents=body.amount_cents,
-            date=date.today(),
+            date=today(),
             kind="assign",
             note=body.note,
         )
@@ -236,15 +236,15 @@ def move(body: MoveIn, session: SessionDep) -> BudgetOut:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, f"{source.name} only has {dollars(max(balance, 0))}"
         )
-    today = date.today()
+    day = today()
     note = body.note or f"{source.name} → {target.name}"
     session.add_all(
         [
             Allocation(
-                bucket=source, amount_cents=-body.amount_cents, date=today, kind="move", note=note
+                bucket=source, amount_cents=-body.amount_cents, date=day, kind="move", note=note
             ),
             Allocation(
-                bucket=target, amount_cents=body.amount_cents, date=today, kind="move", note=note
+                bucket=target, amount_cents=body.amount_cents, date=day, kind="move", note=note
             ),
         ]
     )

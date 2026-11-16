@@ -1,10 +1,11 @@
 """Buckets, the fresh-start split, assigning and moving money."""
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 from sqlalchemy import select
 
-from app.models import Allocation
+from app.models import Account, Allocation
+from app.services.clock import today
 from app.services.format import dollars
 
 
@@ -18,7 +19,7 @@ def start(client, opening, day=None):
     return client.post(
         "/budget/start",
         json={
-            "start_date": (day or date.today()).isoformat(),
+            "start_date": (day or today()).isoformat(),
             "opening": [{"bucket_id": b["id"], "amount_cents": c} for b, c in opening],
         },
     )
@@ -59,7 +60,7 @@ def test_fresh_start_splits_available_money(client, money):
     assert response.status_code == 200, response.text
 
     body = response.json()
-    assert body["start_date"] == date.today().isoformat()
+    assert body["start_date"] == today().isoformat()
     assert (body["assigned_cents"], body["unassigned_cents"]) == (208_000, 72_000)
     goal = next(b for b in body["buckets"] if b["name"] == "Switch 2")
     assert goal["progress_pct"] == 36  # $180 of $500
@@ -91,7 +92,7 @@ def test_starting_over_replaces_every_allocation(client, money, db_session):
 
 
 def test_start_date_cant_be_in_the_future(client, money):
-    response = start(client, [], day=date.today() + timedelta(days=1))
+    response = start(client, [], day=today() + timedelta(days=1))
     assert response.status_code == 400
 
 
@@ -172,3 +173,19 @@ def test_delete_only_buckets_without_history(client, money):
     response = client.delete(f"/buckets/{rent['id']}")
     assert response.status_code == 409
     assert response.json()["detail"] == "Rent has history; archive it instead"
+
+
+def test_pending_transactions_count_in_available_money(client, money, db_session, chequing, add):
+    """Banks leave pending transactions out of the balance they report; buckets don't."""
+    card = db_session.scalar(select(Account).where(Account.name == "Tangerine Mastercard"))
+    before = client.get("/budget").json()["available_cents"]  # $200 owed on the card
+
+    add(card, 14, -2_000, "PENDING DINNER", pending=True)
+    # Paying the card off: already gone from chequing (and its balance), pending on the card.
+    add(chequing, 13, -20_000, "Tangerine Credit Card Payment", is_transfer=True)
+    chequing.balance_cents -= 20_000
+    add(card, 13, 20_000, "PAYMENT - THANK YOU", is_transfer=True, pending=True)
+
+    balances = client.get("/summary/balances").json()
+    assert balances["owed_cents"] == 2_000  # paid off; just the pending dinner
+    assert client.get("/budget").json()["available_cents"] == before - 2_000

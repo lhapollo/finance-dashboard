@@ -25,7 +25,7 @@ from app.schemas import StandardTransaction
 _POSTED_SUFFIX = re.compile(r"\s+Posted\s*:\s*\d{1,2} [A-Za-z]{3} \d{4}$")
 
 # Each bank's description cleanup, as its CSV converter does it.
-_CLEANERS = {
+CLEANERS = {
     ("Tangerine", "credit"): clean_tangerine_card,
     ("Tangerine", "chequing"): clean_tangerine,
     ("Tangerine", "savings"): clean_tangerine,
@@ -46,7 +46,7 @@ class PlaidTransaction:
 def convert_plaid(t: dict[str, Any], account: Account) -> PlaidTransaction:
     raw = " ".join((t.get("original_description") or t["name"]).split())
     raw = _POSTED_SUFFIX.sub("", raw)[:500]
-    clean = _CLEANERS.get((account.institution, account.type), clean_description)
+    clean = CLEANERS.get((account.institution, account.type), clean_description)
     day = (account.type == "credit" and t.get("authorized_date")) or t["date"]
     return PlaidTransaction(
         transaction=StandardTransaction(
