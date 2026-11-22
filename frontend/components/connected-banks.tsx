@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePlaidLink, type PlaidLinkOnSuccessMetadata } from "react-plaid-link";
 
@@ -47,6 +48,7 @@ export function ConnectedBanks({
   const [busy, setBusy] = useState<"connect" | "sync" | null>(null);
   const [results, setResults] = useState<SyncResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function sync() {
     setBusy("sync");
@@ -67,6 +69,7 @@ export function ConnectedBanks({
   async function openLink(itemId: number | null) {
     setBusy("connect");
     setError(null);
+    setNotice(null);
     try {
       const path = itemId === null ? "/plaid/link-token" : `/plaid/link-token?item_id=${itemId}`;
       const { link_token } = await api<{ link_token: string }>(path, { method: "POST" });
@@ -79,6 +82,7 @@ export function ConnectedBanks({
 
   async function linkFinished(publicToken: string, metadata: PlaidLinkOnSuccessMetadata) {
     const reconnecting = link?.itemId !== null;
+    const item = items?.find((i) => i.id === link?.itemId);
     setLink(null);
     try {
       // Reconnecting fixes the existing login, so there's no new token to save.
@@ -93,7 +97,16 @@ export function ConnectedBanks({
         });
       }
       reload();
-      if (reconnecting) await sync();
+      if (reconnecting) {
+        // Plaid skips straight to "done", without showing anything, when the login works.
+        if (item && item.status !== "ITEM_LOGIN_REQUIRED") {
+          setNotice(
+            `Your ${item.institution_name} login already works, so there was nothing to ` +
+              "reconnect. Synced again just in case.",
+          );
+        }
+        await sync();
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -188,6 +201,11 @@ export function ConnectedBanks({
             </div>
           </>
         )}
+        {notice && (
+          <p className="text-muted-foreground" role="status">
+            {notice}
+          </p>
+        )}
         {(error ?? loadError) && <p className="text-destructive">{error ?? loadError}</p>}
         {link && (
           <PlaidLauncher
@@ -238,7 +256,7 @@ function Bank({
           </p>
         </div>
         <div className="flex gap-1">
-          {/* Always here: logging in again also makes Plaid fetch new transactions now. */}
+          {/* Always here, though it only helps when the bank wants a new login. */}
           <Button
             size="sm"
             variant={needsLogin || bankStale ? "default" : "outline"}
@@ -265,8 +283,13 @@ function Bank({
           <p className="text-amber-700 dark:text-amber-400">
             Plaid hasn&apos;t been able to get new data from {item.institution_name} since{" "}
             {formatDay(toIsoDate(new Date(item.bank_updated_at!)))} (
-            {timeAgo(item.bank_updated_at!)}), so newer transactions are missing. Click
-            Reconnect and log in: that makes Plaid fetch them right away.
+            {timeAgo(item.bank_updated_at!)}), so newer transactions are missing. That&apos;s
+            between Plaid and the bank, so reconnecting won&apos;t help. Until it catches up,{" "}
+            <Link href="/import" className="underline">
+              import a CSV
+            </Link>{" "}
+            from {item.institution_name}: rows Plaid already has are skipped, and Plaid&apos;s
+            copies match the CSV rows when it catches up.
           </p>
         )
       )}

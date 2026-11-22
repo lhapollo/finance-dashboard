@@ -99,8 +99,8 @@ export type BalanceSummary = {
 
 export type ImportResult = {
   inserted: number;
-  skipped: number; // already imported, or after_cutoff
-  after_cutoff: number; // rows on days Plaid covers for this account
+  skipped: number; // already imported, or from_plaid
+  from_plaid: number; // rows Plaid already brought in (same date and amount)
 };
 
 /** Whether Plaid keys are in .env; `problem` says what's missing when they aren't. */

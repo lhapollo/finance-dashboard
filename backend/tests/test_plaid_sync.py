@@ -417,23 +417,106 @@ def test_sync_with_nothing_connected_needs_no_keys(client, monkeypatch):
 # --- CSVs after linking ---
 
 
-def test_csv_rows_after_the_cutoff_are_skipped(client, fake, item, chequing, add, db_session):
-    add(chequing, 5, -100)
-    links = [{"plaid_account_id": "pa-chq", "account_id": chequing.id}]
-    client.put(f"/plaid/items/{item.id}/accounts", json={"links": links})
-    assert chequing.csv_cutoff_date == date(2026, 10, 5)
-
-    csv = (
-        "Date,Transaction,Name,Memo,Amount\n"
-        "10/4/2026,DEBIT,Coffee,,-4.50\n"
-        "10/9/2026,DEBIT,Lunch,,-12.00\n"
-    )
+def import_csv(client, account, *lines):
+    csv = "Date,Transaction,Name,Memo,Amount\n" + "".join(f"{line}\n" for line in lines)
     response = client.post(
-        "/import",
-        data={"account_id": chequing.id},
-        files={"file": ("chequing.csv", csv, "text/csv")},
+        "/import", data={"account_id": account.id}, files={"file": ("x.csv", csv, "text/csv")}
     )
-    assert response.json() == {"inserted": 1, "skipped": 1, "after_cutoff": 1}
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_a_csv_fills_in_what_plaid_is_missing(client, fake, linked, chequing, db_session):
+    # Plaid stopped reaching the bank after the coffee.
+    fake.page("", "c1", added=[plaid_txn("p1", "pa-chq", "2026-11-04", 4.5, "COFFEE")])
+    sync(client)
+
+    result = import_csv(
+        client,
+        chequing,
+        "11/4/2026,DEBIT,Coffee,,-4.50",  # Plaid has it: skipped
+        "11/9/2026,DEBIT,Lunch,,-12.00",  # Plaid doesn't: imported
+        "11/9/2026,DEBIT,Lunch,,-12.00",  # a second, identical lunch is its own row
+    )
+    assert result == {"inserted": 2, "skipped": 1, "from_plaid": 1}
+
+    # Plaid catches up: its copies claim the CSV rows instead of doubling up.
+    fake.page(
+        "c1",
+        "c2",
+        added=[
+            plaid_txn("p2", "pa-chq", "2026-11-09", 12, "LUNCH"),
+            plaid_txn("p3", "pa-chq", "2026-11-09", 12, "LUNCH"),
+        ],
+    )
+    result = sync(client)[0]
+    assert (result["added"], result["matched"]) == (0, 2)
+    assert sorted(t.plaid_transaction_id for t in rows(db_session, chequing)) == ["p1", "p2", "p3"]
+    assert len(rows(db_session, chequing)) == 3
+
+
+def test_a_csv_row_turns_plaids_pending_copy_into_a_posted_one(
+    client, fake, linked, chequing, db_session
+):
+    pending = plaid_txn("pend", "pa-chq", "2026-11-07", 30, "BAR RAVAL", pending=True)
+    fake.page("", "c1", added=[pending])
+    sync(client)
+    [row] = rows(db_session, chequing)
+    row.category, row.category_source = "restaurants", "manual"
+
+    # The CSV has it posted two days later: the same row, now posted, keeping the edit.
+    result = import_csv(client, chequing, "11/9/2026,DEBIT,Bar Raval,,-30.00")
+    assert result == {"inserted": 1, "skipped": 0, "from_plaid": 0}
+    [row] = rows(db_session, chequing)
+    assert (row.pending, row.source, row.date) == (False, "csv", date(2026, 11, 9))
+    assert row.category == "restaurants"
+    assert import_csv(client, chequing, "11/9/2026,DEBIT,Bar Raval,,-30.00")["inserted"] == 0
+
+    # Plaid posts it: its posted copy claims the row, and its pending one is gone.
+    posted = plaid_txn(
+        "post", "pa-chq", "2026-11-09", 30, "BAR RAVAL", pending_transaction_id="pend"
+    )
+    fake.page("c1", "c2", added=[posted], removed=["pend"])
+    result = sync(client)[0]
+    assert (result["added"], result["matched"]) == (0, 1)
+    [row] = rows(db_session, chequing)
+    assert (row.plaid_transaction_id, row.category) == ("post", "restaurants")
+
+
+def test_plaid_posting_drops_its_pending_copy_when_a_csv_row_has_it(
+    client, fake, linked, chequing, add, db_session
+):
+    # Pending at Plaid, and (too far apart to be matched on import) already in from a CSV.
+    fake.page("", "c1", added=[plaid_txn("pend", "pa-chq", "2026-11-01", 30, pending=True)])
+    sync(client)
+    add(chequing, date(2026, 11, 9), -3000)
+
+    posted = plaid_txn("post", "pa-chq", "2026-11-09", 30, pending_transaction_id="pend")
+    fake.page("c1", "c2", added=[posted], removed=["pend"])
+    result = sync(client)[0]
+    assert (result["added"], result["matched"], result["removed"]) == (0, 1, 1)
+    [row] = rows(db_session, chequing)
+    assert (row.source, row.plaid_transaction_id, row.pending) == ("csv", "post", False)
+
+
+def test_balances_count_csv_rows_plaid_hasnt_seen(client, fake, linked, chequing, db_session):
+    from app.services.summaries import balance_summary
+
+    fake.page("", "c1")
+    sync(client)  # chequing's balance from Plaid: $2,500.10
+    before = balance_summary(db_session).cash_cents
+    import_csv(client, chequing, "11/9/2026,DEBIT,Lunch,,-12.00")
+    assert balance_summary(db_session).cash_cents == before - 1200
+
+    # Once Plaid has it, the bank's balance is trusted again: it includes the lunch, so
+    # counting the row on top would take it off twice.
+    PLAID_ACCOUNTS[1]["balances"]["current"] -= 12
+    try:
+        fake.page("c1", "c2", added=[plaid_txn("p1", "pa-chq", "2026-11-09", 12, "LUNCH")])
+        sync(client)
+    finally:
+        PLAID_ACCOUNTS[1]["balances"]["current"] += 12
+    assert balance_summary(db_session).cash_cents == before - 1200
 
 
 def test_disconnecting_returns_accounts_to_csv(client, fake, linked, chequing, db_session):

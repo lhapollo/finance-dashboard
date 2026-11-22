@@ -103,9 +103,9 @@ function ImportForm() {
             <p className="mt-4 text-sm" role="status">
               Added <strong>{result.inserted}</strong> new transaction
               {result.inserted === 1 ? "" : "s"}; skipped{" "}
-              {result.skipped - result.after_cutoff} already imported.
-              {result.after_cutoff > 0 &&
-                ` Also skipped ${result.after_cutoff} on days Plaid covers for this account.`}
+              {result.skipped - result.from_plaid} already imported.
+              {result.from_plaid > 0 &&
+                ` Also skipped ${result.from_plaid} that Plaid already brought in.`}
             </p>
           )}
           {error && (

@@ -28,7 +28,7 @@ def test_import_saves_every_row(client, db_session, cibc):
     response = upload(client, cibc.id, SAMPLE)
 
     assert response.status_code == 200
-    assert response.json() == {"inserted": 9, "skipped": 0, "after_cutoff": 0}
+    assert response.json() == {"inserted": 9, "skipped": 0, "from_plaid": 0}
     loblaws = db_session.scalar(select(Transaction).where(Transaction.description == "Loblaws"))
     assert loblaws.amount_cents == -4618
     assert loblaws.raw_description == "LOBLAWS #1042 TORONTO, ON"
@@ -41,7 +41,7 @@ def test_importing_the_same_file_twice_skips_everything(client, db_session, cibc
     upload(client, cibc.id, SAMPLE)
     response = upload(client, cibc.id, SAMPLE)
 
-    assert response.json() == {"inserted": 0, "skipped": 9, "after_cutoff": 0}
+    assert response.json() == {"inserted": 0, "skipped": 9, "from_plaid": 0}
     assert count(db_session) == 9
 
 
@@ -52,7 +52,7 @@ def test_overlapping_download_only_adds_new_rows(client, db_session, cibc):
 
     response = upload(client, cibc.id, SAMPLE)
 
-    assert response.json() == {"inserted": 5, "skipped": 4, "after_cutoff": 0}
+    assert response.json() == {"inserted": 5, "skipped": 4, "from_plaid": 0}
     assert count(db_session) == 9
 
 

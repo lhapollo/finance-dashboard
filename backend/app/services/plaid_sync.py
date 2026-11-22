@@ -218,6 +218,18 @@ class _Applier:
                 self._update(row, p)
             return
 
+        # Already imported from a CSV (before linking, or while Plaid was behind): Plaid
+        # claims that row instead of adding a copy. If Plaid also had it as pending, that
+        # pending copy is now a duplicate.
+        if not p.pending and (candidates := self.unclaimed[(account.id, t.date, t.amount_cents)]):
+            row = candidates.pop(0)
+            row.plaid_transaction_id = p.plaid_transaction_id
+            self.by_plaid_id[p.plaid_transaction_id] = row
+            self.result.matched += 1
+            if p.pending_transaction_id:
+                self._remove(p.pending_transaction_id)
+            return
+
         # A posted transaction replacing the pending one: update that row in place, so any
         # category or name you gave the pending one carries over.
         if p.pending_transaction_id and (
@@ -227,14 +239,6 @@ class _Applier:
             row.fingerprint = plaid_fingerprint(p.plaid_transaction_id)
             self.by_plaid_id[p.plaid_transaction_id] = row
             self._update(row, p)
-            return
-
-        # Already imported from a CSV: Plaid claims that row instead of adding a copy.
-        if not p.pending and (candidates := self.unclaimed[(account.id, t.date, t.amount_cents)]):
-            row = candidates.pop(0)
-            row.plaid_transaction_id = p.plaid_transaction_id
-            self.by_plaid_id[p.plaid_transaction_id] = row
-            self.result.matched += 1
             return
 
         row = Transaction(

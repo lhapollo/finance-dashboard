@@ -1,4 +1,6 @@
 import io
+from collections import Counter
+from datetime import date, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
@@ -46,30 +48,40 @@ def import_csv(
     if not parsed:
         raise HTTPException(400, "file has no transactions")
 
-    # Once an account is linked to Plaid, Plaid owns the days after the cutoff. A CSV row
-    # there would duplicate the Plaid one, since their wording differs enough to dodge
-    # fingerprints.
-    cutoff = account.csv_cutoff_date if account.plaid_account_id else None
-    after_cutoff = sum(1 for t in parsed if cutoff and t.date > cutoff)
-
     fps = fingerprints(account.id, parsed)
     existing = set(
         session.scalars(select(Transaction.fingerprint).where(Transaction.fingerprint.in_(fps)))
     )
-    new = [
-        Transaction(
-            account_id=account.id,
-            date=t.date,
-            description=t.description,
-            cleaned_description=t.description,
-            raw_description=t.raw_description,
-            amount_cents=t.amount_cents,
-            fingerprint=fp,
-            source=t.source,
+    plaid = _PlaidCopies(session, account.id)
+    new = []
+    for t, fp in zip(parsed, fps, strict=True):
+        if fp in existing:
+            continue
+        if plaid.take_posted(t.date, t.amount_cents):
+            continue  # Plaid already has it, worded differently enough to dodge fingerprints
+        if (row := plaid.take_pending(t.date, t.amount_cents)) is not None:
+            # Plaid only has it as pending. The CSV shows it posted, so that row becomes the
+            # CSV row (keeping your edits); when Plaid catches up, its posted copy claims it.
+            row.source = "csv"
+            row.pending = False
+            row.date = t.date  # the day it posted, so Plaid's posted copy matches it exactly
+            row.plaid_transaction_id = None
+            row.fingerprint = fp
+            row.raw_description = t.raw_description
+            plaid.converted += 1
+            continue
+        new.append(
+            Transaction(
+                account_id=account.id,
+                date=t.date,
+                description=t.description,
+                cleaned_description=t.description,
+                raw_description=t.raw_description,
+                amount_cents=t.amount_cents,
+                fingerprint=fp,
+                source=t.source,
+            )
         )
-        for t, fp in zip(parsed, fps, strict=True)
-        if fp not in existing and not (cutoff and t.date > cutoff)
-    ]
     session.add_all(new)
     session.flush()  # gives the new rows their ids, which transfer pairing needs
     detect_transfers(session)  # across all rows, since a new row may pair with an old one
@@ -80,5 +92,51 @@ def import_csv(
         raise HTTPException(400, str(e)) from None
     session.commit()
     return ImportResult(
-        inserted=len(new), skipped=len(parsed) - len(new), after_cutoff=after_cutoff
+        inserted=len(new) + plaid.converted,
+        skipped=len(parsed) - len(new) - plaid.converted,
+        from_plaid=plaid.skipped,
     )
+
+
+# How far a pending charge's date can be before the day it posts.
+_PENDING_DAYS = timedelta(days=5)
+
+
+class _PlaidCopies:
+    """Transactions Plaid already brought in for this account, which a CSV row may repeat.
+
+    Plaid sometimes falls behind a bank for days, and a CSV fills the gap. Rows Plaid has are
+    matched by date and amount, one for one (two $5 coffees on a day are two rows), the same
+    way a Plaid sync claims CSV rows, so either can come first without doubling up."""
+
+    def __init__(self, session: Session, account_id: int):
+        rows = session.scalars(
+            select(Transaction)
+            .where(Transaction.account_id == account_id, Transaction.source == "plaid")
+            .order_by(Transaction.id)
+        ).all()
+        self.posted: Counter[tuple[date, int]] = Counter(
+            (t.date, t.amount_cents) for t in rows if not t.pending
+        )
+        self.pending = [t for t in rows if t.pending]
+        self.skipped = 0
+        self.converted = 0
+
+    def take_posted(self, day: date, amount_cents: int) -> bool:
+        if self.posted[(day, amount_cents)] > 0:
+            self.posted[(day, amount_cents)] -= 1
+            self.skipped += 1
+            return True
+        return False
+
+    def take_pending(self, day: date, amount_cents: int) -> Transaction | None:
+        matches = [
+            t
+            for t in self.pending
+            if t.amount_cents == amount_cents and day - _PENDING_DAYS <= t.date <= day
+        ]
+        if not matches:
+            return None
+        row = min(matches, key=lambda t: day - t.date)  # the closest date
+        self.pending.remove(row)
+        return row

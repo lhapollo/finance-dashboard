@@ -29,7 +29,7 @@ from app.services.format import dollars
 from app.services.summaries import (
     INCOME_CATEGORIES,
     balance_summary,
-    pending_by_account,
+    current_balances,
     spending_by_merchant,
     spending_total,
     spent_and_income,
@@ -306,19 +306,17 @@ def get_balances(session: Session, a: NoArgs) -> dict[str, Any]:
     summary = balance_summary(session)
     if summary.as_of is None:
         raise ToolError("no bank balances yet (no bank connected through Plaid)")
-    pending = pending_by_account(session)
     accounts = session.scalars(
         select(Account).where(Account.closed_on.is_(None), Account.balance_cents.is_not(None))
     ).all()
+    balances = current_balances(session, list(accounts))
     return {
         "as_of": summary.as_of.isoformat(timespec="minutes"),
         "accounts": [
             {
                 "name": acc.name,
                 # Including pending transactions, like the totals.
-                ("owed" if acc.type == "credit" else "balance"): dollars(
-                    abs(acc.balance_cents + pending.get(acc.id, 0))
-                ),
+                ("owed" if acc.type == "credit" else "balance"): dollars(abs(balances[acc.id])),
             }
             for acc in accounts
         ],

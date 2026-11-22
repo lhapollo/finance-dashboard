@@ -232,9 +232,9 @@ class BalanceSummary(BaseModel):
 
 class ImportResult(BaseModel):
     inserted: int
-    skipped: int  # already imported, or after_cutoff
-    # Of the skipped: rows after the account's CSV cutoff, since Plaid covers those days.
-    after_cutoff: int = 0
+    skipped: int  # already imported, or from_plaid
+    # Of the skipped: rows Plaid already brought in (same date and amount).
+    from_plaid: int = 0
 
 
 class PlaidStatus(BaseModel):

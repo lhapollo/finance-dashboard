@@ -22,7 +22,7 @@ that are.
 from datetime import date, timedelta
 from typing import Literal
 
-from sqlalchemy import Date, case, cast, exists, func, literal, select, union_all
+from sqlalchemy import Date, case, cast, exists, func, literal, or_, select, union_all
 from sqlalchemy.orm import Session, aliased
 
 from app.models import Account, CategoryBucket, Transaction, TransactionSplit
@@ -219,6 +219,36 @@ def pending_by_account(session: Session) -> dict[int, int]:
     return {account_id: int(total) for account_id, total in rows}
 
 
+def unseen_by_plaid(session: Session) -> dict[int, int]:
+    """On accounts linked to Plaid: the total of CSV rows from after linking that Plaid
+    hasn't brought in yet (signed), by account id. A CSV fills the gap when Plaid falls behind
+    a bank, and then Plaid's balance is just as old as its transactions."""
+    rows = session.execute(
+        select(Transaction.account_id, func.sum(Transaction.amount_cents))
+        .join(Account, Account.id == Transaction.account_id)
+        .where(
+            Account.plaid_account_id.is_not(None),
+            Transaction.source == "csv",
+            Transaction.plaid_transaction_id.is_(None),
+            or_(Account.csv_cutoff_date.is_(None), Transaction.date > Account.csv_cutoff_date),
+        )
+        .group_by(Transaction.account_id)
+    )
+    return {account_id: int(total) for account_id, total in rows}
+
+
+def current_balances(session: Session, accounts: list[Account]) -> dict[int, int]:
+    """Each account's bank balance plus what the bank's number doesn't include yet: pending
+    transactions and CSV rows Plaid hasn't seen. By account id; accounts need a balance."""
+    pending = pending_by_account(session)
+    unseen = unseen_by_plaid(session)
+    return {
+        a.id: a.balance_cents + pending.get(a.id, 0) + unseen.get(a.id, 0)
+        for a in accounts
+        if a.balance_cents is not None
+    }
+
+
 def balance_summary(session: Session) -> BalanceSummary:
     """Cash, money owed on cards, and what's left, from the balances banks report through
     Plaid. Open accounts only. Investments (a TFSA) aren't spending money, so they're out.
@@ -227,13 +257,13 @@ def balance_summary(session: Session) -> BalanceSummary:
     them. So each balance here includes its pending transactions, as if they'd posted.
     Otherwise a pending $20 dinner lowers its bucket but not available money, and $20 seems
     to appear in unassigned; and a pending card payment, already gone from chequing but
-    still owed on the card, gets subtracted twice."""
+    still owed on the card, gets subtracted twice. For the same reason, CSV rows Plaid
+    hasn't seen yet are included too (see unseen_by_plaid)."""
     accounts = session.scalars(
         select(Account).where(Account.closed_on.is_(None), Account.type != "investment")
     ).all()
-    pending = pending_by_account(session)
     known = [a for a in accounts if a.balance_cents is not None]
-    balance = {a.id: a.balance_cents + pending.get(a.id, 0) for a in known}
+    balance = current_balances(session, known)
     cash = sum(balance[a.id] for a in known if a.type != "credit")
     owed = -sum(balance[a.id] for a in known if a.type == "credit")
     return BalanceSummary(
