@@ -201,6 +201,10 @@ class PlaidItem(Base):
     # Empty until the first sync.
     cursor: Mapped[str | None] = mapped_column(Text)
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # When Plaid last managed to get new data from the bank itself. Our sync can succeed while
+    # this stays old: Plaid answers fine, it just has nothing newer because it can't reach the
+    # bank. Logging in again (Reconnect) makes Plaid fetch right away.
+    bank_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # ok, or Plaid's error code from the last sync (e.g. ITEM_LOGIN_REQUIRED).
     status: Mapped[str] = mapped_column(String(50), default="ok", server_default="ok")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

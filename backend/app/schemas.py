@@ -266,6 +266,7 @@ class PlaidItemOut(BaseModel):
     environment: str
     status: str
     last_synced_at: datetime | None
+    bank_updated_at: datetime | None
     created_at: datetime
 
 

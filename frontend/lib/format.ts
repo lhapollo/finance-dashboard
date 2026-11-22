@@ -53,6 +53,11 @@ export function formatDay(isoDate: string, today = new Date()): string {
   });
 }
 
+/** Whether a full timestamp is more than `ms` milliseconds before `now`. */
+export function isOlderThan(timestamp: string, ms: number, now = new Date()): boolean {
+  return now.getTime() - new Date(timestamp).getTime() > ms;
+}
+
 /** "just now", "5 minutes ago", "3 hours ago", "2 days ago", from a full timestamp. */
 export function timeAgo(timestamp: string, now = new Date()): string {
   const minutes = Math.floor((now.getTime() - new Date(timestamp).getTime()) / 60_000);

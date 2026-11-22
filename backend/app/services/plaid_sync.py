@@ -85,6 +85,7 @@ def sync_item(session: Session, plaid: PlaidClient, item_id: int) -> SyncResult:
         token = decrypt_token(item.access_token)
         added, modified, removed, cursor = _fetch_changes(plaid, token, item.cursor)
         balances = plaid.post("/accounts/get", {"access_token": token})["accounts"]
+        bank_updated_at = _bank_updated_at(plaid.post("/item/get", {"access_token": token}))
     except (PlaidError, TokenKeyError) as e:
         item.status = e.code if isinstance(e, PlaidError) else "TOKEN_KEY_CHANGED"
         session.commit()
@@ -103,6 +104,7 @@ def sync_item(session: Session, plaid: PlaidClient, item_id: int) -> SyncResult:
 
     item.cursor = cursor
     item.last_synced_at = now
+    item.bank_updated_at = bank_updated_at
     item.status = "ok"
     session.flush()
     detect_transfers(session)
@@ -110,6 +112,14 @@ def sync_item(session: Session, plaid: PlaidClient, item_id: int) -> SyncResult:
     apply_rules(session)
     session.commit()
     return result
+
+
+def _bank_updated_at(item_info: dict[str, Any]) -> datetime | None:
+    """When Plaid last got transactions from the bank, from Plaid's /item/get. Missing until
+    Plaid's first successful check."""
+    status = item_info.get("status") or {}
+    when = (status.get("transactions") or {}).get("last_successful_update")
+    return datetime.fromisoformat(when) if when else None
 
 
 def _balance_cents(plaid_account: dict[str, Any], account: Account) -> int | None:

@@ -16,10 +16,14 @@ import {
   type PlaidStatus,
   type SyncResult,
 } from "@/lib/api";
-import { formatDay, timeAgo, toIsoDate } from "@/lib/format";
+import { formatDay, isOlderThan, timeAgo, toIsoDate } from "@/lib/format";
 
 /** "Don't import" in the account dropdowns. */
 const SKIP = "skip";
+
+/** Plaid normally checks a bank several times a day; a day without a successful check means
+ * it's having trouble reaching the bank. */
+const BANK_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Banks connected through Plaid: which of my accounts each one feeds, when it last synced,
@@ -218,6 +222,9 @@ function Bank({
   busy: boolean;
 }) {
   const needsLogin = item.status === "ITEM_LOGIN_REQUIRED";
+  // Our sync can succeed while Plaid itself can't reach the bank, so it has nothing new.
+  const bankStale =
+    item.bank_updated_at !== null && isOlderThan(item.bank_updated_at, BANK_STALE_AFTER_MS);
 
   return (
     <section className="flex flex-col gap-3 rounded-lg border p-3">
@@ -231,11 +238,15 @@ function Bank({
           </p>
         </div>
         <div className="flex gap-1">
-          {needsLogin && (
-            <Button size="sm" onClick={onReconnect} disabled={busy}>
-              Reconnect
-            </Button>
-          )}
+          {/* Always here: logging in again also makes Plaid fetch new transactions now. */}
+          <Button
+            size="sm"
+            variant={needsLogin || bankStale ? "default" : "outline"}
+            onClick={onReconnect}
+            disabled={busy}
+          >
+            Reconnect
+          </Button>
           <Button variant="ghost" size="sm" onClick={onRemove} disabled={busy}>
             Disconnect
           </Button>
@@ -247,9 +258,16 @@ function Bank({
           {item.institution_name} wants you to log in again before Plaid can read new
           transactions. Click Reconnect.
         </p>
+      ) : item.status !== "ok" ? (
+        <p className="text-destructive">The last sync failed ({item.status}).</p>
       ) : (
-        item.status !== "ok" && (
-          <p className="text-destructive">The last sync failed ({item.status}).</p>
+        bankStale && (
+          <p className="text-amber-700 dark:text-amber-400">
+            Plaid hasn&apos;t been able to get new data from {item.institution_name} since{" "}
+            {formatDay(toIsoDate(new Date(item.bank_updated_at!)))} (
+            {timeAgo(item.bank_updated_at!)}), so newer transactions are missing. Click
+            Reconnect and log in: that makes Plaid fetch them right away.
+          </p>
         )
       )}
       {result && <SyncSummary result={result} />}

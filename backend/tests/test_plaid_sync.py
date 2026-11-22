@@ -52,6 +52,8 @@ class FakePlaid:
         self.calls: list[tuple[str, dict]] = []
         self.fail_with: PlaidError | None = None
         self.fail_once: PlaidError | None = None
+        # Plaid's last successful check of the bank, as /item/get reports it.
+        self.last_successful_update: str | None = "2026-11-18T21:45:40.88Z"
 
     def page(self, cursor, next_cursor, added=(), modified=(), removed=(), has_more=False):
         self.pages[cursor] = {
@@ -70,6 +72,9 @@ class FakePlaid:
             return {"link_token": "link-update"}
         if path == "/accounts/get":
             return {"accounts": PLAID_ACCOUNTS}
+        if path == "/item/get":
+            update = {"last_successful_update": self.last_successful_update}
+            return {"item": {"item_id": "item-1"}, "status": {"transactions": update}}
         if path == "/transactions/sync":
             assert body["access_token"] == TOKEN
             if self.fail_once:
@@ -268,6 +273,23 @@ def test_the_cursor_is_saved_and_the_next_sync_continues_from_it(
     fake.page("c2", "c3", added=[plaid_txn("p3", "pa-chq", "2026-11-12", 7)])
     assert sync(client)[0]["added"] == 1
     assert len(rows(db_session, chequing)) == 3
+
+
+def test_sync_saves_when_plaid_last_reached_the_bank(client, fake, linked):
+    # Our sync succeeds, but Plaid's own last check of the bank is days old: the page shows
+    # this so you know to reconnect.
+    fake.page("", "c1")
+    sync(client)
+    assert linked.status == "ok"
+    assert linked.bank_updated_at == datetime(2026, 11, 18, 21, 45, 40, 880000, tzinfo=UTC)
+    bank = client.get("/plaid/items").json()[0]
+    assert bank["bank_updated_at"].startswith("2026-11-18T21:45:40.88")
+
+    # Before Plaid's first successful check there's no date yet.
+    fake.last_successful_update = None
+    fake.page("c1", "c2")
+    sync(client)
+    assert linked.bank_updated_at is None
 
 
 def test_a_pending_charge_that_posts_keeps_your_edits(client, fake, linked, card, db_session):

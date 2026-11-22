@@ -117,6 +117,8 @@ export type PlaidItem = {
   environment: "sandbox" | "production";
   status: string; // "ok", or Plaid's error code from the last sync
   last_synced_at: string | null;
+  // When Plaid last got new data from the bank itself (null before its first check).
+  bank_updated_at: string | null;
   created_at: string;
 };
 

@@ -12,6 +12,7 @@ import {
   formatDay,
   formatMonth,
   formatWholeDollars,
+  isOlderThan,
   monthStarts,
   timeAgo,
 } from "./format";
@@ -116,5 +117,14 @@ describe("timeAgo", () => {
     expect(timeAgo("2026-11-14T11:15:00Z", now)).toBe("45 minutes ago");
     expect(timeAgo("2026-11-14T06:00:00Z", now)).toBe("6 hours ago");
     expect(timeAgo("2026-11-12T11:00:00Z", now)).toBe("2 days ago");
+  });
+});
+
+describe("isOlderThan", () => {
+  const now = new Date("2026-11-22T12:00:00Z");
+  const day = 24 * 60 * 60 * 1000;
+  it("is true only past the limit", () => {
+    expect(isOlderThan("2026-11-18T21:45:40.88Z", day, now)).toBe(true);
+    expect(isOlderThan("2026-11-21T13:00:00Z", day, now)).toBe(false);
   });
 });
