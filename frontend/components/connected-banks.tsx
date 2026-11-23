@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePlaidLink, type PlaidLinkOnSuccessMetadata } from "react-plaid-link";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,12 @@ export function ConnectedBanks({
     try {
       const done = await api<SyncResult[]>("/plaid/sync?force=true", { method: "POST" });
       setResults(done);
+      const added = done.reduce((sum, r) => sum + r.added, 0);
+      if (done.every((r) => r.error === null)) {
+        toast.success(
+          added === 0 ? "Synced: nothing new" : `Synced: ${added} new transaction${added === 1 ? "" : "s"}`,
+        );
+      }
       reload();
       onChanged();
     } catch (e) {

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { Toaster } from "sonner";
+
 import { AppSidebar } from "@/components/app-sidebar";
 import "./globals.css";
 
@@ -27,6 +29,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col md:flex-row">
         <AppSidebar />
         <main className="flex min-w-0 flex-1 flex-col gap-4 p-4 md:p-6">{children}</main>
+        <Toaster position="bottom-right" theme="system" duration={3000} />
       </body>
     </html>
   );

@@ -2,6 +2,7 @@
 
 import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { TransactionDetails } from "@/components/transaction-details";
 import { Badge } from "@/components/ui/badge";
@@ -94,6 +95,13 @@ export function TransactionsTable({
       });
       reload();
       onEdited?.();
+      toast.success(
+        change.category !== undefined
+          ? `${t.description} → ${categoryLabel(change.category)}`
+          : change.is_transfer
+            ? `${t.description} is a transfer now, so it's not counted`
+            : `${t.description} counts again`,
+      );
     } catch (e) {
       setSaveError(`Couldn't save "${t.description}": ${(e as Error).message}`);
     } finally {
@@ -157,7 +165,8 @@ export function TransactionsTable({
             </TableRow>
           )}
           {data.items.map((t) => (
-            <TableRow key={t.id} className={cn(saving === t.id && "opacity-60")}>
+            // Every row the height of the category dropdown, so plain-text rows match.
+            <TableRow key={t.id} className={cn("h-11", saving === t.id && "opacity-60")}>
               <TableCell className="text-muted-foreground tabular">{formatDay(t.date)}</TableCell>
               <TableCell className="max-w-64">
                 {/* Opens the details panel; the bank's exact text shows on hover too. */}
@@ -243,7 +252,8 @@ export function TransactionsTable({
                 )}
               </TableCell>
               <TableCell
-                className={cn("text-right tabular", t.amount_cents > 0 && "text-positive")}
+                // Less padding, so an amount with a note under it still fits the row height.
+                className={cn("py-1 text-right tabular", t.amount_cents > 0 && "text-positive")}
               >
                 {formatCurrency(t.amount_cents)}
                 {t.pending && (

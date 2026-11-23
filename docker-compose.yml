@@ -76,6 +76,7 @@ services:
     env_file: .env
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8001
+      NEXT_PUBLIC_DEMO: "true"  # hides Import: there are no real CSVs to upload here
     command: sh -c "npm install && npm run dev -- --hostname 0.0.0.0"
     ports:
       - "127.0.0.1:3001:3000"

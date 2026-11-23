@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, useState } from "react";
+import { toast } from "sonner";
 
 import { MoneyInput } from "@/components/money-input";
 import { Badge } from "@/components/ui/badge";
@@ -118,7 +119,12 @@ function PaycheckRow({
       is_paycheck: isPaycheck,
     });
     setError(problem);
-    if (!problem) onChanged();
+    if (!problem) {
+      onChanged();
+      toast.success(
+        isPaycheck === null ? "Back to automatic" : isPaycheck ? "Marked as a paycheck" : "Not a paycheck",
+      );
+    }
   }
 
   async function notAPaycheck() {
@@ -241,7 +247,10 @@ function SplitEditor({
     const failed = await send(`/paychecks/${p.transaction_id}/split`, "PUT", parts);
     setSaving(false);
     setError(failed);
-    if (!failed) onDone();
+    if (!failed) {
+      onDone();
+      toast.success(parts.length > 0 ? "Paycheck split into your buckets" : "Split cleared");
+    }
   }
 
   if (buckets.length === 0) {
@@ -347,6 +356,7 @@ function RulesEditor({ buckets, onChanged }: { buckets: Bucket[]; onChanged: () 
       setDraft(null);
       reload();
       onChanged();
+      toast.success("Paycheck rules saved");
     }
   }
 
@@ -490,6 +500,7 @@ function IncomeSources({
       setMatch("");
       reload();
       onChanged();
+      toast.success(`Added ${body.name} as a paycheck`);
     }
   }
 

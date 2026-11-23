@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { FillBar } from "@/components/fill-bar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { query, useApi, type CategoryTotal } from "@/lib/api";
@@ -50,7 +51,7 @@ export function CategoryBreakdown({
               <li key={category}>
                 <Link
                   href={`/transactions${query({ category, start, end })}`}
-                  className="group grid gap-1 rounded-md"
+                  className="group grid gap-1 rounded-md transition-transform duration-200 ease-out hover:translate-x-1"
                 >
                   <div className="flex items-baseline justify-between gap-2 text-sm">
                     <span className="flex items-center gap-2 group-hover:underline">
@@ -65,12 +66,9 @@ export function CategoryBreakdown({
                     </span>
                   </div>
                   <div className="h-1.5 rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: total_cents > 0 ? `${Math.max(2, (total_cents / largest) * 100)}%` : 0,
-                        background: categoryColor(category),
-                      }}
+                    <FillBar
+                      percent={total_cents > 0 ? Math.max(2, (total_cents / largest) * 100) : 0}
+                      color={categoryColor(category)}
                     />
                   </div>
                 </Link>

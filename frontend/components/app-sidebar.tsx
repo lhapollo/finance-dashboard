@@ -12,14 +12,15 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { IS_DEMO } from "@/lib/demo";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboardIcon },
   { href: "/transactions", label: "Transactions", icon: ArrowLeftRightIcon },
   { href: "/accounts", label: "Accounts", icon: LandmarkIcon },
-  { href: "/import", label: "Import", icon: UploadIcon },
-  // Later phases; shown so the layout matches the plan.
+  // The demo runs on fake data, so there's nothing to upload.
+  ...(IS_DEMO ? [] : [{ href: "/import", label: "Import", icon: UploadIcon }]),
   { href: "/buckets", label: "Buckets", icon: PiggyBankIcon },
   { href: "/ask", label: "Ask", icon: MessageCircleIcon },
 ];

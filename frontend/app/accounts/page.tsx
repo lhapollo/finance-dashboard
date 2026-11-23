@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useState } from "react";
 
+import { AnimatedNumber } from "@/components/animated-number";
 import { ConnectedBanks } from "@/components/connected-banks";
 import { MonthPicker } from "@/components/month-picker";
 import { Badge } from "@/components/ui/badge";
@@ -266,7 +267,7 @@ function Amount({
         ) : (
           <>
             {signed && cents > 0 ? "+" : ""}
-            {formatCurrency(cents)}
+            <AnimatedNumber value={cents} format={formatCurrency} />
           </>
         )}
       </dd>

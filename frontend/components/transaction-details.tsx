@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -369,6 +370,7 @@ function usePatch(id: number, onSaved: () => void) {
         body: JSON.stringify(body),
       });
       onSaved();
+      toast.success("Saved");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -631,6 +633,7 @@ function SplitSection({
       });
       setEditing(false);
       onSaved();
+      toast.success(parts.length > 0 ? `Split into ${parts.length} parts` : "Split removed");
     } catch (e) {
       setError((e as Error).message);
     } finally {

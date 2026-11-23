@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { Suspense, useState } from "react";
+import { toast } from "sonner";
 
+import { AnimatedNumber } from "@/components/animated-number";
+import { FillBar } from "@/components/fill-bar";
 import { MoneyInput } from "@/components/money-input";
 import { PaycheckReminder } from "@/components/paycheck-reminder";
 import { Badge } from "@/components/ui/badge";
@@ -101,11 +104,14 @@ function Setup({
     if (!problem) {
       reload();
       onDone();
+      toast.success("Budget started");
     }
   }
 
   async function remove(b: Bucket) {
-    setError(await send(`/buckets/${b.id}`, "DELETE"));
+    const problem = await send(`/buckets/${b.id}`, "DELETE");
+    setError(problem);
+    if (!problem) toast.success(`Deleted ${b.name}`);
     reload();
   }
 
@@ -332,7 +338,7 @@ function Stat({
           tone === "negative" && "text-destructive",
         )}
       >
-        {cents === null ? "—" : formatCurrency(cents)}
+        {cents === null ? "—" : <AnimatedNumber value={cents} format={formatCurrency} />}
       </dd>
     </div>
   );
@@ -357,12 +363,13 @@ function BucketCard({
   };
 
   /** Runs a change; closes the panel when it works, shows the error when it doesn't. */
-  async function change(path: string, method: string, body?: object) {
+  async function change(path: string, method: string, body: object, done: string) {
     const problem = await send(path, method, body);
     setError(problem);
     if (!problem) {
       setPanel(null);
       reload();
+      toast.success(done);
     }
   }
 
@@ -370,7 +377,7 @@ function BucketCard({
     const leftover =
       b.balance_cents !== 0 ? ` Its ${formatCurrency(b.balance_cents)} goes back to unassigned.` : "";
     if (window.confirm(`Archive ${b.name}?${leftover}`)) {
-      await change(`/buckets/${b.id}`, "PATCH", { archived: true });
+      await change(`/buckets/${b.id}`, "PATCH", { archived: true }, `Archived ${b.name}`);
     }
   }
 
@@ -386,7 +393,7 @@ function BucketCard({
               b.balance_cents < 0 && "text-destructive",
             )}
           >
-            {formatCurrency(b.balance_cents)}
+            <AnimatedNumber value={b.balance_cents} format={formatCurrency} />
           </p>
         </CardAction>
       </CardHeader>
@@ -412,7 +419,7 @@ function BucketCard({
               aria-valuemin={0}
               aria-valuemax={100}
             >
-              <div className="h-full rounded-full bg-positive" style={{ width: `${b.progress_pct ?? 0}%` }} />
+              <FillBar percent={b.progress_pct ?? 0} className="bg-positive" />
             </div>
             <p className="text-muted-foreground">
               {formatCurrency(Math.max(b.balance_cents, 0))} of{" "}
@@ -442,10 +449,14 @@ function BucketCard({
         {panel === "money" && (
           <MoneyPanel
             onSubmit={(cents, direction) =>
-              change("/budget/assign", "POST", {
-                bucket_id: b.id,
-                amount_cents: direction === "in" ? cents : -cents,
-              })
+              change(
+                "/budget/assign",
+                "POST",
+                { bucket_id: b.id, amount_cents: direction === "in" ? cents : -cents },
+                direction === "in"
+                  ? `Added ${formatCurrency(cents)} to ${b.name}`
+                  : `Took ${formatCurrency(cents)} back from ${b.name}`,
+              )
             }
           />
         )}
@@ -454,16 +465,20 @@ function BucketCard({
             from={b}
             others={others}
             onSubmit={(toId, cents) =>
-              change("/budget/move", "POST", {
-                from_bucket_id: b.id,
-                to_bucket_id: toId,
-                amount_cents: cents,
-              })
+              change(
+                "/budget/move",
+                "POST",
+                { from_bucket_id: b.id, to_bucket_id: toId, amount_cents: cents },
+                `Moved ${formatCurrency(cents)} to ${others.find((o) => o.id === toId)?.name ?? "the other bucket"}`,
+              )
             }
           />
         )}
         {panel === "edit" && (
-          <EditPanel bucket={b} onSubmit={(fields) => change(`/buckets/${b.id}`, "PATCH", fields)} />
+          <EditPanel
+            bucket={b}
+            onSubmit={(fields) => change(`/buckets/${b.id}`, "PATCH", fields, "Bucket saved")}
+          />
         )}
         {error && <p className="text-destructive">{error}</p>}
       </CardContent>
@@ -588,7 +603,10 @@ function ArchivedBucket({ bucket: b, reload }: { bucket: Bucket; reload: () => v
         onClick={async () => {
           const problem = await send(`/buckets/${b.id}`, "PATCH", { archived: false });
           setError(problem);
-          if (!problem) reload();
+          if (!problem) {
+            reload();
+            toast.success(`${b.name} is back`);
+          }
         }}
       >
         Unarchive
@@ -619,6 +637,7 @@ function CategoryDefaults({
       category,
     });
     setSaveError(problem);
+    if (!problem) toast.success(`Made a ${categoryLabel(category)} bucket`);
     reload();
     onChanged();
   }
@@ -628,6 +647,14 @@ function CategoryDefaults({
       bucket_id: value === "none" ? null : Number(value),
     });
     setSaveError(problem);
+    if (!problem) {
+      const bucket = buckets.find((b) => String(b.id) === value);
+      toast.success(
+        bucket
+          ? `${categoryLabel(category)} now comes out of ${bucket.name}`
+          : `${categoryLabel(category)} has no bucket now`,
+      );
+    }
     reload();
     onChanged();
   }
@@ -732,6 +759,7 @@ function NewBucketForm({ onCreated }: { onCreated: () => void }) {
     setSaving(false);
     setError(problem);
     if (!problem) {
+      toast.success(`Made ${name}`);
       setName("");
       setTarget("");
       setDate("");

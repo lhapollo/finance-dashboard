@@ -156,11 +156,43 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* The hand cursor on anything clickable, and "not allowed" on what's switched off.
+     (Tailwind 4 leaves buttons with the plain arrow.) In this base layer, so a class like
+     cursor-default on one element still wins. */
+  button,
+  [role="button"],
+  [role="switch"],
+  [role="checkbox"],
+  [role="option"],
+  [role="tab"],
+  a[href],
+  summary,
+  select,
+  input[type="file"],
+  label:has(input, [role="switch"], [role="checkbox"]) {
+    cursor: pointer;
+  }
+  :disabled,
+  [aria-disabled="true"],
+  [data-disabled] {
+    cursor: not-allowed;
+  }
   /* Columns of money line up when every digit is the same width. */
   .tabular {
     font-variant-numeric: tabular-nums;
   }
   html {
     @apply font-sans;
+  }
+}
+/* Less motion for people who asked their computer for it (macOS: Settings > Accessibility >
+   Display > Reduce motion): animations and transitions finish instantly. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

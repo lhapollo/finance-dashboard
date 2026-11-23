@@ -2,23 +2,43 @@
 
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api, useApi, type Account, type ImportResult } from "@/lib/api";
+import { IS_DEMO } from "@/lib/demo";
 
 export default function ImportPage() {
   // Reading ?account_id= (from a link on the Accounts page) needs a Suspense boundary.
   return (
-    <Suspense>
-      <ImportForm />
-    </Suspense>
+    <Suspense>{IS_DEMO ? <NotInDemo /> : <ImportForm />}</Suspense>
+  );
+}
+
+/** The demo runs on made-up transactions, so there are no bank CSVs to upload. */
+function NotInDemo() {
+  return (
+    <>
+      <h1 className="text-xl font-semibold">Import</h1>
+      <Card className="max-w-lg">
+        <CardHeader>
+          <CardTitle>Not available in the demo</CardTitle>
+          <CardDescription>
+            The demo runs on made-up transactions, so there are no bank CSVs to upload. In the
+            real app, this is where you&apos;d upload a CSV downloaded from your bank.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    </>
   );
 }
 
 function ImportForm() {
-  const { data: accounts, error: accountsError } = useApi<Account[]>("/accounts");
+  const { data: allAccounts, error: accountsError } = useApi<Account[]>("/accounts");
+  // A closed account gets no new CSVs (reopen it on the Accounts page if one turns up).
+  const accounts = allAccounts?.filter((a) => a.closed_on === null);
   const [accountId, setAccountId] = useState<string | null>(useSearchParams().get("account_id"));
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -38,7 +58,13 @@ function ImportForm() {
     form.set("account_id", selected);
     form.set("file", file);
     try {
-      setResult(await api<ImportResult>("/import", { method: "POST", body: form }));
+      const done = await api<ImportResult>("/import", { method: "POST", body: form });
+      setResult(done);
+      toast.success(
+        done.inserted === 0
+          ? "Nothing new: everything in that file was already here"
+          : `Imported ${done.inserted} new transaction${done.inserted === 1 ? "" : "s"}`,
+      );
     } catch (e) {
       setError((e as Error).message);
     } finally {

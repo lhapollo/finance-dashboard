@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useState } from "react";
 
+import { AnimatedNumber } from "@/components/animated-number";
 import { CategoryBreakdown } from "@/components/category-breakdown";
 import { MonthPicker } from "@/components/month-picker";
 import { PaycheckReminder } from "@/components/paycheck-reminder";
@@ -53,7 +54,7 @@ function Dashboard() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Spent"
-          value={summary ? formatWholeDollars(summary.spent_cents) : null}
+          value={summary && <AnimatedNumber value={summary.spent_cents} format={formatWholeDollars} />}
           detail={summary && `${formatCurrency(summary.spent_cents)} in ${formatMonth(summary.month)}`}
         />
         <StatCard
@@ -80,12 +81,12 @@ function Dashboard() {
         />
         <StatCard
           label="Income"
-          value={summary ? formatWholeDollars(summary.income_cents) : null}
+          value={summary && <AnimatedNumber value={summary.income_cents} format={formatWholeDollars} />}
           detail="Income and cashback. Refunds lower spending instead"
         />
         <StatCard
           label="Net"
-          value={summary ? formatWholeDollars(summary.net_cents) : null}
+          value={summary && <AnimatedNumber value={summary.net_cents} format={formatWholeDollars} />}
           detailTone={summary && summary.net_cents >= 0 ? "positive" : "muted"}
           detail="Income minus spending"
         />

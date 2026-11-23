@@ -10,7 +10,7 @@ export function StatCard({
   detailTone = "muted",
 }: {
   label: string;
-  value: string | null; // null while loading
+  value: React.ReactNode | null; // null while loading
   detail?: React.ReactNode;
   detailTone?: "muted" | "positive" | "negative";
 }) {
@@ -23,7 +23,7 @@ export function StatCard({
         {value === null ? (
           <Skeleton className="h-8 w-28" />
         ) : (
-          <div className="text-2xl font-semibold tracking-tight">{value}</div>
+          <div className="animate-in text-2xl font-semibold tracking-tight duration-300 fade-in">{value}</div>
         )}
         {detail && (
           <div
