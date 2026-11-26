@@ -162,6 +162,8 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const message = Array.isArray(detail) ? detail[0]?.msg : detail;
     throw new ApiError(message ?? `Request failed (${response.status})`);
   }
+  // 204 No Content (e.g. removing a bank) has no body, so there's no JSON to read.
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
