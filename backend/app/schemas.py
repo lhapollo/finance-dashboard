@@ -109,6 +109,7 @@ class TransactionOut(BaseModel):
     # the category's default bucket applies.
     bucket_id: int | None
     bucket_assigned_by: str | None
+    note: str | None  # a note I wrote on it
     source: str  # csv / plaid
     pending: bool  # Plaid only: not final yet, the amount can still change
     imported_at: datetime
@@ -142,6 +143,13 @@ class TransactionUpdate(BaseModel):
     # bucket_auto: true instead to go back to the category's default bucket.
     bucket_id: int | None = None
     bucket_auto: bool = False
+    # A note on this transaction. Send null or "" to remove it.
+    note: str | None = Field(default=None, max_length=500)
+
+    @field_validator("note")
+    @classmethod
+    def tidy_note(cls, v: str | None) -> str | None:
+        return (v.strip() or None) if v is not None else None
 
     @field_validator("description")
     @classmethod

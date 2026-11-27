@@ -84,6 +84,9 @@ class Transaction(Base):
     # Whether this is a paycheck, when I said so by hand (True / False). None: follow
     # detection, which is worked out from IncomeSource rather than stored.
     paycheck_override: Mapped[bool | None] = mapped_column(Boolean)
+    # A note I wrote, e.g. "new glasses, half covered by insurance". Never set by imports or
+    # Plaid, and kept when Plaid updates the row.
+    note: Mapped[str | None] = mapped_column(String(500))
     imported_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

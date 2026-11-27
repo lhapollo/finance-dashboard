@@ -227,6 +227,10 @@ class _Applier:
             self.by_plaid_id[p.plaid_transaction_id] = row
             self.result.matched += 1
             if p.pending_transaction_id:
+                # Keep a note written on the pending copy before it's deleted.
+                pending = self.by_plaid_id.get(p.pending_transaction_id)
+                if pending is not None and pending.note and not row.note:
+                    row.note = pending.note
                 self._remove(p.pending_transaction_id)
             return
 

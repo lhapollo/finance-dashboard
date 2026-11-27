@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, StickyNoteIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -169,14 +169,17 @@ export function TransactionsTable({
             <TableRow key={t.id} className={cn("h-11", saving === t.id && "opacity-60")}>
               <TableCell className="text-muted-foreground tabular">{formatDay(t.date)}</TableCell>
               <TableCell className="max-w-64">
-                {/* Opens the details panel; the bank's exact text shows on hover too. */}
+                {/* Opens the details panel; the bank's exact text (and any note) shows on hover. */}
                 <button
                   type="button"
                   onClick={() => setOpenId(t.id)}
-                  title={t.raw_description}
-                  className="block max-w-full truncate text-left hover:underline"
+                  title={t.note ? `${t.raw_description}\n\nNote: ${t.note}` : t.raw_description}
+                  className="flex max-w-full items-center gap-1.5 text-left hover:underline"
                 >
-                  {t.description}
+                  <span className="truncate">{t.description}</span>
+                  {t.note && (
+                    <StickyNoteIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Has a note" />
+                  )}
                 </button>
               </TableCell>
               <TableCell>

@@ -107,6 +107,7 @@ def list_transactions(
             or_(
                 Transaction.description.icontains(search, autoescape=True),
                 Transaction.raw_description.icontains(search, autoescape=True),
+                Transaction.note.icontains(search, autoescape=True),
             )
         )
 
@@ -169,6 +170,9 @@ def update_transaction(
     if update.category is not None:
         t.category = update.category
         t.category_source = "manual"
+
+    if "note" in update.model_fields_set:
+        t.note = update.note
 
     if update.bucket_auto:
         t.bucket_id, t.bucket_assigned_by = None, None

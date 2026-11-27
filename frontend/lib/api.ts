@@ -42,6 +42,7 @@ export type Transaction = {
   // Otherwise the category's default bucket applies (see CategoryBucket).
   bucket_id: number | null;
   bucket_assigned_by: "manual" | null;
+  note: string | null; // a note I wrote on it
   source: "csv" | "plaid";
   pending: boolean; // Plaid only: not final yet, the amount can still change
   imported_at: string;

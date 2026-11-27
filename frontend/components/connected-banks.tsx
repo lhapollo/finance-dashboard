@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Script from "next/script";
 import { useEffect, useState } from "react";
 import { usePlaidLink, type PlaidLinkOnSuccessMetadata } from "react-plaid-link";
 import { toast } from "sonner";
@@ -46,6 +47,7 @@ export function ConnectedBanks({
   const { data: status } = useApi<PlaidStatus>("/plaid/status");
   const { data: items, error: loadError, reload } = useApi<PlaidItem[]>("/plaid/items", syncKey);
   const [link, setLink] = useState<{ token: string; itemId: number | null } | null>(null);
+  const [plaidReady, setPlaidReady] = useState(false); // Plaid's script has loaded
   const [busy, setBusy] = useState<"connect" | "sync" | null>(null);
   const [results, setResults] = useState<SyncResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -214,7 +216,13 @@ export function ConnectedBanks({
           </p>
         )}
         {(error ?? loadError) && <p className="text-destructive">{error ?? loadError}</p>}
-        {link && (
+        {/* We load Plaid's script ourselves, once. Left to react-plaid-link, React's dev-mode
+            double mount adds it twice. The launcher waits for it: the library assumes a
+            script tag it finds has already loaded. */}
+        {status?.configured && (
+          <Script src={PLAID_SCRIPT} strategy="afterInteractive" onReady={() => setPlaidReady(true)} />
+        )}
+        {link && plaidReady && (
           <PlaidLauncher
             token={link.token}
             onSuccess={linkFinished}
@@ -415,6 +423,8 @@ function BankAccounts({ item, onLinked }: { item: PlaidItem; onLinked: () => Pro
     </div>
   );
 }
+
+const PLAID_SCRIPT = "https://cdn.plaid.com/link/v2/stable/link-initialize.js";
 
 /** Opens Plaid Link as soon as its script has loaded. Only rendered once we have a token. */
 function PlaidLauncher({

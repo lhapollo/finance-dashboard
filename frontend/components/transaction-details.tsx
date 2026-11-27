@@ -115,6 +115,8 @@ function Details({
 
         {/* Keyed on the saved name so the form resets after each save. */}
         <RenameForm key={`${t.description}|${t.description_source}`} t={t} onSaved={saved} />
+        {/* Keyed on the saved note, for the same reason. */}
+        <NoteForm key={t.note ?? ""} t={t} onSaved={saved} />
 
         <dl className="grid grid-cols-[8rem_1fr] gap-x-4 gap-y-3 text-sm">
           <Row label="From the bank">
@@ -543,6 +545,52 @@ function PurchasePicker({
         Cancel
       </Button>
     </div>
+  );
+}
+
+/** A note of my own, e.g. what a purchase was for. Plaid and imports never change it. */
+function NoteForm({ t, onSaved }: { t: Transaction; onSaved: () => void }) {
+  const [note, setNote] = useState(t.note ?? "");
+  const { patch, busy, error } = usePatch(t.id, onSaved);
+  const unchanged = note.trim() === (t.note ?? "");
+
+  return (
+    <form
+      className="flex flex-col gap-3 rounded-lg border p-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        patch({ note });
+      }}
+    >
+      <Label htmlFor="txn-note">Note</Label>
+      <textarea
+        id="txn-note"
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        onKeyDown={(e) => {
+          // Cmd/Ctrl+Enter saves; plain Enter adds a new line.
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !unchanged) {
+            e.preventDefault();
+            patch({ note });
+          }
+        }}
+        maxLength={500}
+        rows={2}
+        placeholder="What was this for?"
+        className="min-h-16 w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-base outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+      />
+      <div className="flex gap-2">
+        <Button type="submit" disabled={busy || unchanged}>
+          {busy ? "Saving…" : "Save note"}
+        </Button>
+        {t.note && (
+          <Button type="button" variant="ghost" disabled={busy} onClick={() => patch({ note: null })}>
+            Remove
+          </Button>
+        )}
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </form>
   );
 }
 

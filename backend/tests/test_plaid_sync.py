@@ -302,6 +302,7 @@ def test_a_pending_charge_that_posts_keeps_your_edits(client, fake, linked, card
     [row] = rows(db_session, card)
     assert row.pending
     row.category, row.category_source = "restaurants", "manual"
+    row.note = "Sam's birthday"
 
     # It posts with the tip added: Plaid removes the pending one and adds the posted one.
     posted = plaid_txn(
@@ -314,7 +315,7 @@ def test_a_pending_charge_that_posts_keeps_your_edits(client, fake, linked, card
 
     [row] = rows(db_session, card)
     assert (row.pending, row.amount_cents, row.plaid_transaction_id) == (False, -4800, "post")
-    assert row.category == "restaurants"
+    assert (row.category, row.note) == ("restaurants", "Sam's birthday")
 
 
 def test_modified_and_removed(client, fake, linked, chequing, add, db_session):
@@ -463,6 +464,7 @@ def test_a_csv_row_turns_plaids_pending_copy_into_a_posted_one(
     sync(client)
     [row] = rows(db_session, chequing)
     row.category, row.category_source = "restaurants", "manual"
+    row.note = "Sam's birthday"
 
     # The CSV has it posted two days later: the same row, now posted, keeping the edit.
     result = import_csv(client, chequing, "11/9/2026,DEBIT,Bar Raval,,-30.00")
@@ -481,6 +483,7 @@ def test_a_csv_row_turns_plaids_pending_copy_into_a_posted_one(
     assert (result["added"], result["matched"]) == (0, 1)
     [row] = rows(db_session, chequing)
     assert (row.plaid_transaction_id, row.category) == ("post", "restaurants")
+    assert row.note == "Sam's birthday"
 
 
 def test_plaid_posting_drops_its_pending_copy_when_a_csv_row_has_it(
@@ -489,6 +492,8 @@ def test_plaid_posting_drops_its_pending_copy_when_a_csv_row_has_it(
     # Pending at Plaid, and (too far apart to be matched on import) already in from a CSV.
     fake.page("", "c1", added=[plaid_txn("pend", "pa-chq", "2026-11-01", 30, pending=True)])
     sync(client)
+    [pending] = rows(db_session, chequing)
+    pending.note = "Sam's birthday"
     add(chequing, date(2026, 11, 9), -3000)
 
     posted = plaid_txn("post", "pa-chq", "2026-11-09", 30, pending_transaction_id="pend")
@@ -497,6 +502,7 @@ def test_plaid_posting_drops_its_pending_copy_when_a_csv_row_has_it(
     assert (result["added"], result["matched"], result["removed"]) == (0, 1, 1)
     [row] = rows(db_session, chequing)
     assert (row.source, row.plaid_transaction_id, row.pending) == ("csv", "post", False)
+    assert row.note == "Sam's birthday"  # moved over from the pending copy
 
 
 def test_balances_count_csv_rows_plaid_hasnt_seen(client, fake, linked, chequing, db_session):
