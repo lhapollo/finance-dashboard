@@ -237,11 +237,15 @@ export type Bucket = {
   progress_pct: number | null; // goals: balance as a % of the target
 };
 
-/** The whole budget. unassigned = available - in buckets. */
+/** The whole budget. unassigned = available + owed to me - in buckets. */
 export type Budget = {
   start_date: string | null; // null until the fresh-start setup is done
   available_cents: number | null; // null: no bank balances (connect a bank)
   available_as_of: string | null;
+  // Still waiting to be paid back on reimbursable purchases. Gone from available money but
+  // still mine, so it counts in unassigned.
+  owed_to_me_cents: number;
+  owed_to_me_count: number; // how many purchases that is
   assigned_cents: number;
   unassigned_cents: number | null; // negative: more in buckets than you have
   unbucketed_spent_cents: number; // spending since the start that no bucket covers

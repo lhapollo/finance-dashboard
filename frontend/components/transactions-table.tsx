@@ -1,12 +1,13 @@
 "use client";
 
-import { ArrowDownIcon, ArrowUpIcon, StickyNoteIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, InfoIcon, StickyNoteIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { TransactionDetails } from "@/components/transaction-details";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -84,7 +85,10 @@ export function TransactionsTable({
   const [openId, setOpenId] = useState<number | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  async function save(t: Transaction, change: { category?: string; is_transfer?: boolean }) {
+  async function save(
+    t: Transaction,
+    change: { category?: string; is_transfer?: boolean; reimbursable?: boolean },
+  ) {
     setSaving(t.id);
     setSaveError(null);
     try {
@@ -98,7 +102,11 @@ export function TransactionsTable({
       toast.success(
         change.category !== undefined
           ? `${t.description} → ${categoryLabel(change.category)}`
-          : change.is_transfer
+          : change.reimbursable !== undefined
+            ? change.reimbursable
+              ? `${t.description}: someone's paying you back, so it's not your spending`
+              : `${t.description} counts as your spending again`
+            : change.is_transfer
             ? `${t.description} is a transfer now, so it's not counted`
             : `${t.description} counts again`,
       );
@@ -153,20 +161,30 @@ export function TransactionsTable({
             <TableHead>Description</TableHead>
             <TableHead className="w-44">Category</TableHead>
             <TableHead className="w-28 text-right">Amount</TableHead>
+            <TableHead className="w-32">
+              <span
+                className="flex items-center gap-1"
+                title={REIMBURSABLE_HELP}
+              >
+                Paid back?
+                <InfoIcon className="size-3.5 text-muted-foreground" aria-hidden />
+                <span className="sr-only">{REIMBURSABLE_HELP}</span>
+              </span>
+            </TableHead>
             <TableHead className="w-24 text-center">Transfer</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {data.items.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+              <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                 No transactions match.
               </TableCell>
             </TableRow>
           )}
           {data.items.map((t) => (
             // Every row the height of the category dropdown, so plain-text rows match.
-            <TableRow key={t.id} className={cn("h-11", saving === t.id && "opacity-60")}>
+            <TableRow key={t.id} className={cn("h-11 whitespace-nowrap", saving === t.id && "opacity-60")}>
               <TableCell className="text-muted-foreground tabular">{formatDay(t.date)}</TableCell>
               <TableCell className="max-w-64">
                 {/* Opens the details panel; the bank's exact text (and any note) shows on hover. */}
@@ -177,6 +195,15 @@ export function TransactionsTable({
                   className="flex max-w-full items-center gap-1.5 text-left hover:underline"
                 >
                   <span className="truncate">{t.description}</span>
+                  {t.pending && (
+                    <Badge
+                      variant="outline"
+                      className="h-4 shrink-0 px-1 text-[10px] text-muted-foreground"
+                      title="Your bank hasn't finalized this yet; the amount can still change"
+                    >
+                      pending
+                    </Badge>
+                  )}
                   {t.note && (
                     <StickyNoteIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Has a note" />
                   )}
@@ -254,36 +281,11 @@ export function TransactionsTable({
                   </Select>
                 )}
               </TableCell>
-              <TableCell
-                // Less padding, so an amount with a note under it still fits the row height.
-                className={cn("py-1 text-right tabular", t.amount_cents > 0 && "text-positive")}
-              >
+              <TableCell className={cn("text-right tabular", t.amount_cents > 0 && "text-positive")}>
                 {formatCurrency(t.amount_cents)}
-                {t.pending && (
-                  <span
-                    className="block text-xs text-muted-foreground"
-                    title="Your bank hasn't finalized this yet; the amount can still change"
-                  >
-                    pending
-                  </span>
-                )}
-                {t.reimbursement_status === "waiting" ? (
-                  <span className="block text-xs text-muted-foreground" title="Not counted as spending">
-                    {t.reimbursed_cents > 0
-                      ? `${formatCurrency(-t.amount_cents - t.reimbursed_cents)} still owed`
-                      : "owed to you"}
-                  </span>
-                ) : t.reimbursement_status === "received" ? (
-                  <span className="block text-xs text-positive" title="Not counted as spending">
-                    paid back
-                  </span>
-                ) : (
-                  t.reimbursed_cents > 0 && (
-                    <span className="block text-xs text-positive">
-                      {formatCurrency(t.reimbursed_cents)} back
-                    </span>
-                  )
-                )}
+              </TableCell>
+              <TableCell>
+                <ReimbursableCell t={t} disabled={saving === t.id} onChange={(r) => save(t, { reimbursable: r })} />
               </TableCell>
               <TableCell className="text-center">
                 <Switch
@@ -336,6 +338,54 @@ export function TransactionsTable({
         </div>
       )}
     </div>
+  );
+}
+
+const REIMBURSABLE_HELP =
+  "Tick it when someone will pay you back for all of a purchase (a work dinner, a friend's " +
+  "share). It stops counting as your spending, and its bucket gets the money back. When " +
+  "their payment arrives, open it and link it to the purchase.";
+
+/** The "Paid back?" column: a checkbox on money out, plus how the paying back is going. */
+function ReimbursableCell({
+  t,
+  disabled,
+  onChange,
+}: {
+  t: Transaction;
+  disabled: boolean;
+  onChange: (reimbursable: boolean) => void;
+}) {
+  // Same rules as the details panel: only plain money out can be reimbursable.
+  const can = t.amount_cents < 0 && !t.is_transfer && t.splits.length === 0;
+  const status =
+    t.reimbursement_status === "waiting"
+      ? {
+          text:
+            t.reimbursed_cents > 0
+              ? `${formatCurrency(-t.amount_cents - t.reimbursed_cents)} owed`
+              : "owed to you",
+          tone: "text-muted-foreground",
+        }
+      : t.reimbursement_status === "received"
+        ? { text: "paid back", tone: "text-positive" }
+        : t.reimbursed_cents > 0
+          ? { text: `${formatCurrency(t.reimbursed_cents)} back`, tone: "text-positive" }
+          : null;
+
+  return (
+    <span className="flex items-center gap-2 text-xs">
+      {can && (
+        <Checkbox
+          checked={t.reimbursable}
+          disabled={disabled}
+          onCheckedChange={(checked) => onChange(checked)}
+          aria-label={`Someone will pay back ${t.description}`}
+          title={REIMBURSABLE_HELP}
+        />
+      )}
+      {status && <span className={status.tone}>{status.text}</span>}
+    </span>
   );
 }
 

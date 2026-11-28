@@ -6,7 +6,7 @@ import { FillBar } from "@/components/fill-bar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { query, useApi, type CategoryTotal } from "@/lib/api";
-import { categoryColor, categoryLabel } from "@/lib/categories";
+import { SERIES, categoryColor, categoryLabel, seriesFor } from "@/lib/categories";
 import { addMonths, formatCurrency, formatMonth } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +46,8 @@ export function CategoryBreakdown({
         ) : data.length === 0 ? (
           <p className="text-sm text-muted-foreground">No spending this month.</p>
         ) : (
+          <div className="flex flex-col gap-4">
+          <SplitBar totals={data} />
           <ul className="flex flex-col gap-2.5">
             {data.map(({ category, total_cents }) => (
               <li key={category}>
@@ -75,8 +77,51 @@ export function CategoryBreakdown({
               </li>
             ))}
           </ul>
+          </div>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** How the month's spending splits up, at a glance: one block per category, sized by its
+ * share, in the same colors as the list below it (which gives the names and amounts).
+ * Categories without a color slot are folded into one gray "Other" block at the end. The
+ * list is the bar's legend and table view. */
+function SplitBar({ totals }: { totals: CategoryTotal[] }) {
+  const blocks = new Map<string, number>();
+  for (const { category, total_cents } of totals) {
+    if (total_cents <= 0) continue; // refunds outweighed spending: no share to show
+    const series = seriesFor(category);
+    blocks.set(series, (blocks.get(series) ?? 0) + total_cents);
+  }
+  // Fixed slot order, not biggest first: the palette is checked for colorblind-safe
+  // neighbours in that order. The list below ranks them.
+  const ordered = SERIES.filter((series) => blocks.has(series)).map(
+    (series) => [series, blocks.get(series)!] as const,
+  );
+  const total = ordered.reduce((sum, [, cents]) => sum + cents, 0);
+  if (total === 0) return null;
+
+  return (
+    <div
+      className="flex h-3 w-full gap-0.5"
+      role="img"
+      aria-label={`Spending split: ${ordered
+        .map(([series, cents]) => `${categoryLabel(series)} ${Math.round((cents / total) * 100)}%`)
+        .join(", ")}`}
+    >
+      {ordered.map(([series, cents]) => {
+        const pct = (cents / total) * 100;
+        return (
+          <div
+            key={series}
+            className="h-full min-w-1 rounded-[3px] transition-opacity hover:opacity-80"
+            style={{ width: `${pct}%`, background: categoryColor(series) }}
+            title={`${categoryLabel(series)}: ${formatCurrency(cents)} (${Math.round(pct)}%)`}
+          />
+        );
+      })}
+    </div>
   );
 }

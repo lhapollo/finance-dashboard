@@ -154,18 +154,25 @@ def start_budget(body: BudgetStart, session: SessionDep) -> BudgetOut:
                 status.HTTP_400_BAD_REQUEST, "can't put money in an archived bucket"
             )
 
-    available = budget(session).available_cents
-    if available is None:
+    current = budget(session)
+    if current.available_cents is None:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "the budget needs to know how much money you have: connect a bank on the "
             "Accounts page first",
         )
+    # Money I'm owed counts as mine, the same as in unassigned (see services/budget.py).
+    mine = current.available_cents + current.owed_to_me_cents
     total = sum(o.amount_cents for o in body.opening)
-    if total > available:
+    if total > mine:
+        owed = (
+            f" (including {dollars(current.owed_to_me_cents)} you're owed)"
+            if current.owed_to_me_cents
+            else ""
+        )
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"that's {dollars(total)}, but you have {dollars(available)} available",
+            f"that's {dollars(total)}, but you have {dollars(mine)} available{owed}",
         )
 
     for old in session.scalars(select(Allocation)):

@@ -4,7 +4,14 @@ Store facts, calculate the rest: only allocations (decisions I made) are saved. 
 the total in buckets and unassigned money are worked out fresh on every request.
 
   bucket balance   = its allocations - spending from it since the budget started
-  unassigned money = available money - everything in buckets
+  unassigned money = available money + money I'm owed - everything in buckets
+
+Money I'm owed is what's still waiting to be paid back on reimbursable purchases. Marking a
+purchase reimbursable takes it out of its bucket's spending, but the money has really left
+the account, so available money doesn't have it. It's still mine, so it counts; when the
+payback arrives, it moves from "owed" to "available" and unassigned doesn't change. Only
+purchases from accounts that available money is worked out from count, or a purchase that
+never lowered available money would raise unassigned.
 
 Which bucket spending comes out of is decided in summaries.py (_bucket), using the same
 counting rules as the dashboard: transfers and reimbursable purchases don't count, refunds
@@ -28,9 +35,11 @@ from app.schemas import BucketOut, BudgetOut, CategoryBucketOut
 from app.services.categories import load_rules
 from app.services.summaries import (
     INCOME_CATEGORIES,
+    balance_account_ids,
     balance_summary,
     spending_by_category,
     spent_by_bucket,
+    waiting_to_be_reimbursed,
 )
 
 
@@ -65,14 +74,17 @@ def budget(session: Session) -> BudgetOut:
     buckets = session.scalars(select(Bucket).order_by(Bucket.archived, Bucket.id)).all()
     money = balance_summary(session)
     available = money.available_cents if money.as_of is not None else None
+    owed = waiting_to_be_reimbursed(session, balance_account_ids(session))
     out = [_bucket_out(b, allocated[b.id], spent.get(b.id, 0)) for b in buckets]
     assigned = sum(b.balance_cents for b in out if not b.archived)
     return BudgetOut(
         start_date=start_date(session),
         available_cents=available,
         available_as_of=money.as_of,
+        owed_to_me_cents=owed.waiting_cents,
+        owed_to_me_count=owed.count,
         assigned_cents=assigned,
-        unassigned_cents=None if available is None else available - assigned,
+        unassigned_cents=None if available is None else available + owed.waiting_cents - assigned,
         unbucketed_spent_cents=spent.get(None, 0),
         buckets=out,
     )

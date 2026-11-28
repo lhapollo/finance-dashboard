@@ -357,9 +357,13 @@ class BudgetOut(BaseModel):
     start_date: date | None  # None until the fresh-start setup is done
     available_cents: int | None  # cash minus card debt, from bank balances (None: unknown)
     available_as_of: datetime | None
+    # Still waiting to be paid back on reimbursable purchases (from accounts with a bank
+    # balance). Already gone from available money, but still mine.
+    owed_to_me_cents: int
+    owed_to_me_count: int  # how many purchases that is
     assigned_cents: int  # in buckets
-    # available - assigned. None when available is unknown. Negative means more is in
-    # buckets than you actually have.
+    # available + owed_to_me - assigned. None when available is unknown. Negative means
+    # more is in buckets than you actually have.
     unassigned_cents: int | None
     # Spending since the start that no bucket covers (its category has no bucket). It still
     # lowers available money, so it comes out of unassigned.

@@ -189,3 +189,62 @@ def test_pending_transactions_count_in_available_money(client, money, db_session
     balances = client.get("/summary/balances").json()
     assert balances["owed_cents"] == 2_000  # paid off; just the pending dinner
     assert client.get("/budget").json()["available_cents"] == before - 2_000
+
+
+def test_money_im_owed_counts_as_mine(client, money, db_session, chequing, add):
+    """Paying for someone takes the money out of my account, but it's still mine: marking it
+    reimbursable refills its bucket without making unassigned go negative, and the payback
+    moves it from "owed" to "available"."""
+    mastercard = db_session.scalar(select(Account).where(Account.name == "Tangerine Mastercard"))
+    dining = make(client, "Dining")
+    assert start(client, [(dining, 50_000)]).status_code == 200
+    assert client.get("/budget").json()["unassigned_cents"] == 230_000
+
+    dinner = add(mastercard, today(), -3_000, "BAR RAVAL", category="dining")
+    mastercard.balance_cents -= 3_000  # the bank's balance has it
+    db_session.flush()
+    assert balances(client)["Dining"] == 47_000
+    assert client.get("/budget").json()["unassigned_cents"] == 230_000
+
+    client.patch(f"/transactions/{dinner.id}", json={"reimbursable": True})
+    body = client.get("/budget").json()
+    assert balances(client)["Dining"] == 50_000
+    assert (body["available_cents"], body["owed_to_me_cents"], body["owed_to_me_count"]) == (
+        277_000,
+        3_000,
+        1,
+    )
+    assert body["unassigned_cents"] == 230_000
+
+    payback = add(chequing, today(), 3_000, "E-TRANSFER FROM SAM")
+    chequing.balance_cents += 3_000
+    db_session.flush()
+    client.patch(f"/transactions/{payback.id}", json={"reimburses_id": dinner.id})
+    body = client.get("/budget").json()
+    assert (body["available_cents"], body["owed_to_me_cents"]) == (280_000, 0)
+    assert body["unassigned_cents"] == 230_000
+
+
+def test_owed_money_only_counts_from_accounts_with_a_balance(client, money, card, add):
+    """CIBC has no bank balance, so its purchases never lowered available money; what I'm owed
+    for them can't raise it either."""
+    dinner = add(card, today(), -3_000, "BAR RAVAL", category="dining")
+    client.patch(f"/transactions/{dinner.id}", json={"reimbursable": True})
+
+    body = client.get("/budget").json()
+    assert body["owed_to_me_cents"] == 0
+    assert client.get("/summary/reimbursements").json()["waiting_cents"] == 3_000  # still owed
+
+
+def test_the_fresh_start_can_split_money_im_owed(client, money, db_session, add):
+    mastercard = db_session.scalar(select(Account).where(Account.name == "Tangerine Mastercard"))
+    dinner = add(mastercard, 1, -3_000, "BAR RAVAL", reimbursable=True)
+    mastercard.balance_cents -= 3_000
+    rent = make(client, "Rent")
+
+    response = start(client, [(rent, 280_001)])
+    assert response.json()["detail"] == (
+        "that's $2,800.01, but you have $2,800.00 available (including $30.00 you're owed)"
+    )
+    assert start(client, [(rent, 280_000)]).status_code == 200
+    assert dinner.reimbursable

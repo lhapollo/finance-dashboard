@@ -87,7 +87,8 @@ function Setup({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const available = budget.available_cents;
+  // Money I'm owed is mine too, so the fresh start splits it along with available money.
+  const available = budget.available_cents === null ? null : budget.available_cents + budget.owed_to_me_cents;
   const check = available === null ? null : checkOpening(available, open.map((b) => typed[b.id] ?? ""));
 
   async function start() {
@@ -180,7 +181,11 @@ function Setup({
               <>
                 You have <strong className="tabular">{formatCurrency(available)}</strong>{" "}
                 available: cash minus what you owe on cards, as of{" "}
-                {timeAgo(budget.available_as_of!)}.
+                {timeAgo(budget.available_as_of!)}
+                {budget.owed_to_me_cents > 0 && (
+                  <>, including {formatCurrency(budget.owed_to_me_cents)} you&apos;re waiting to be paid back</>
+                )}
+                .
               </>
             )}
           </CardDescription>
@@ -266,6 +271,17 @@ function Overview({
             Budgeting since {formatDay(budget.start_date!)}
             {budget.available_as_of && `; balances from ${timeAgo(budget.available_as_of)}`}.
           </p>
+          {budget.owed_to_me_cents > 0 && (
+            <p className="text-sm">
+              <strong className="tabular">{formatCurrency(budget.owed_to_me_cents)}</strong> you&apos;re
+              waiting to be paid back ({budget.owed_to_me_count}{" "}
+              {budget.owed_to_me_count === 1 ? "purchase" : "purchases"}) is already gone from
+              Available, but it&apos;s still yours, so it counts in Unassigned.{" "}
+              <Link href={`/transactions${query({ reimbursable: true })}`} className="underline">
+                See what you&apos;re owed
+              </Link>
+            </p>
+          )}
           {budget.unbucketed_spent_cents !== 0 && (
             <p className="text-sm">
               <strong className="tabular">{formatCurrency(budget.unbucketed_spent_cents)}</strong>{" "}
@@ -279,19 +295,36 @@ function Overview({
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {open.map((b) => (
-          <BucketCard key={b.id} bucket={b} others={open.filter((o) => o.id !== b.id)} reload={reload} />
-        ))}
-        <Card>
-          <CardHeader>
-            <CardTitle>Add a bucket</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <NewBucketForm onCreated={reload} />
-          </CardContent>
-        </Card>
-      </div>
+      {GROUPS.map(({ type, title, blurb }) => {
+        const group = open.filter((b) => b.type === type);
+        if (group.length === 0) return null;
+        const total = group.reduce((sum, b) => sum + b.balance_cents, 0);
+        return (
+          <section key={type} className="flex flex-col gap-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <div>
+                <h2 className="font-medium">{title}</h2>
+                <p className="text-sm text-muted-foreground">{blurb}</p>
+              </div>
+              <span className="text-sm text-muted-foreground tabular">{formatCurrency(total)}</span>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {group.map((b) => (
+                <BucketCard key={b.id} bucket={b} others={open.filter((o) => o.id !== b.id)} reload={reload} />
+              ))}
+            </div>
+          </section>
+        );
+      })}
+
+      <Card className="md:max-w-[calc(50%-0.5rem)]">
+        <CardHeader>
+          <CardTitle>Add a bucket</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <NewBucketForm onCreated={reload} />
+        </CardContent>
+      </Card>
 
       <CategoryDefaults buckets={open} startDate={budget.start_date!} onChanged={reload} />
 
@@ -318,6 +351,12 @@ function Overview({
     </>
   );
 }
+
+/** Buckets are shown in two groups: spent and refilled, or saved up. */
+const GROUPS = [
+  { type: "recurring", title: "Recurring", blurb: "Refilled and spent every paycheck" },
+  { type: "goal", title: "Goals", blurb: "Saved up for something" },
+] as const;
 
 function Stat({
   label,

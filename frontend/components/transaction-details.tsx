@@ -401,8 +401,8 @@ function ReimbursableToggle({ t, onSaved }: { t: Transaction; onSaved: () => voi
       </Label>
       {t.reimbursement_status === "waiting" && (
         <p className="mt-1 text-xs text-muted-foreground">
-          Waiting for {formatCurrency(owed)}. When it arrives, open the payment and link it to
-          this purchase.
+          Waiting for {formatCurrency(owed)}. It still counts as yours in Unassigned. When it
+          arrives, open the payment and link it to this purchase.
         </p>
       )}
       {t.reimbursement_status === "received" && (

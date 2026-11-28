@@ -148,9 +148,12 @@ def spending_over_time(
     return [PeriodCategoryTotal(period=p, category=c, total_cents=t) for p, c, t in rows]
 
 
-def waiting_to_be_reimbursed(session: Session) -> ReimbursementSummary:
+def waiting_to_be_reimbursed(
+    session: Session, account_ids: list[int] | None = None
+) -> ReimbursementSummary:
     """Money I'm owed: reimbursable purchases minus the paybacks linked to them so far, over
-    all time (it's still owed whenever the purchase was)."""
+    all time (it's still owed whenever the purchase was). With account_ids, only purchases
+    made from those accounts."""
     paid_back = (
         select(func.sum(_entries.c.amount_cents))
         .where(_entries.c.reimburses_id == Transaction.id)
@@ -161,6 +164,7 @@ def waiting_to_be_reimbursed(session: Session) -> ReimbursementSummary:
     waiting = (
         select(owed)
         .where(Transaction.reimbursable.is_(True), Transaction.is_transfer.is_(False))
+        .where(True if account_ids is None else Transaction.account_id.in_(account_ids))
         .subquery()
     )
     total, count = session.execute(
@@ -249,6 +253,21 @@ def current_balances(session: Session, accounts: list[Account]) -> dict[int, int
     }
 
 
+def _spending_accounts(session: Session) -> list[Account]:
+    """Open accounts, minus investments (a TFSA isn't spending money)."""
+    return list(
+        session.scalars(
+            select(Account).where(Account.closed_on.is_(None), Account.type != "investment")
+        )
+    )
+
+
+def balance_account_ids(session: Session) -> list[int]:
+    """The accounts available money is worked out from: open, not investments, and with a
+    balance from the bank."""
+    return [a.id for a in _spending_accounts(session) if a.balance_cents is not None]
+
+
 def balance_summary(session: Session) -> BalanceSummary:
     """Cash, money owed on cards, and what's left, from the balances banks report through
     Plaid. Open accounts only. Investments (a TFSA) aren't spending money, so they're out.
@@ -259,9 +278,7 @@ def balance_summary(session: Session) -> BalanceSummary:
     to appear in unassigned; and a pending card payment, already gone from chequing but
     still owed on the card, gets subtracted twice. For the same reason, CSV rows Plaid
     hasn't seen yet are included too (see unseen_by_plaid)."""
-    accounts = session.scalars(
-        select(Account).where(Account.closed_on.is_(None), Account.type != "investment")
-    ).all()
+    accounts = _spending_accounts(session)
     known = [a for a in accounts if a.balance_cents is not None]
     balance = current_balances(session, known)
     cash = sum(balance[a.id] for a in known if a.type != "credit")
